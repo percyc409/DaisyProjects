@@ -1,0 +1,21 @@
+* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+Creating a new project from Repo root:
+python ../DaisyExamples/helper.py create <path2projFolder> --board <boardType> -l ../DaisyExamples/
+
+Board Types: field, patch, patch_sm, petal, pod, seed, versio
+More Details: https://github.com/electro-smith/DaisyWiki/wiki/How-To-Create-a-New-Project
+
+* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+Building Project: 
+Ctrl-shift-B
+
+If you get an error with DaisyLib or DaisySP:
+Ctrl-P, task build_all
+
+* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+Programming Board:
+
+Ctrl-P, task build_and_program_dfu
+
+* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+
