@@ -17,7 +17,7 @@ Svf filtR;
 
 int mode = LP;
 float max_freq;
-bool bypass;
+bool bypass = true;
 
 //Control Functions
 void controls();
@@ -64,9 +64,9 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 
 void controls() {
 
-	// Knob 1: Gain
-	// Knob 2: Volume
-	// Encoder: Changes Distortion Algorithm
+	// Knob 1: Frequency Cutoff
+	// Knob 2: Resonance
+	// Encoder: Changes Filter Type Algorithm
 	// Button 2: BypassFX
 
 	hw.ProcessAllControls();
