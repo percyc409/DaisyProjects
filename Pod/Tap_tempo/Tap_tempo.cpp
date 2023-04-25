@@ -49,7 +49,7 @@ void tap_tempo() {
 		if(hw.button2.RisingEdge() && count > MIN_COUNT) {
 
 			if (averaging) //3rd plus tap
-				freq_tt = 0.6*(freq_tt/2) + 0.4*(BPS/count); // Weighted Averaging
+				freq_tt = 0.6*(freq_tt) + 0.4*(BPS/count); // Weighted Averaging
 			else { 	
 				//2nd tap
 				freq_tt = BPS/count; //frequency = BPS/count
