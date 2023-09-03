@@ -5,6 +5,11 @@ python ../DaisyExamples/helper.py create <path2projFolder> --board <boardType> -
 Board Types: field, patch, patch_sm, petal, pod, seed, versio
 More Details: https://github.com/electro-smith/DaisyWiki/wiki/How-To-Create-a-New-Project
 
+Terrarium Project:
+python ../DaisyExamples/helper.py create Terrarium/<projFolder> --board petal -l ../DaisyExamples/
+Pod Project: 
+python ../DaisyExamples/helper.py create Pod/<projFolder> --board pod -l ../DaisyExamples/
+
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
 Building Project: 
 Ctrl-shift-B
