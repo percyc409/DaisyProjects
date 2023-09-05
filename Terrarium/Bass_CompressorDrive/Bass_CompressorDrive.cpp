@@ -12,62 +12,121 @@ dsy_gpio led1;
 dsy_gpio led2;
 
 Compressor comp;
+Svf filter; // State Variable filter
+Overdrive overdrive;
 
-Parameter attack;
-Parameter release;
 Parameter ratio;
 Parameter threshold;
 Parameter makeup;
+//Parameter k5;  // Knob 5 -> Attack + Distortion
+//Parameter k6;  // Knob 6 -> Release + HP Cutoff
+Parameter attack;
+Parameter release;
 
-bool bypass = true;
+Parameter mix; // between distorted and clean sig (Ignored when overdrive is off)
+Parameter drive;
+Parameter cutoff;
+
+bool bypassComp = true;
+bool bypassDrive = true;
 bool autogain = false;
 bool last_autogain = false;
+
+enum modes {compress, od}; // K5+K6 Mode
+modes knobmode;
+modes ledmode;
 
 void ProcessControls() {
 
 	hw.ProcessAllControls();
-	//controls
+	
+    //Single-Parameter Knobs
     comp.SetThreshold(threshold.Process());
     comp.SetRatio(ratio.Process());
-    comp.SetAttack(attack.Process());
-    comp.SetRelease(release.Process());
 	comp.SetMakeup(makeup.Process());
+
+    //Multi-Parameter Knobs
+    switch(knobmode){
+
+        case compress:  comp.SetAttack(attack.Process());
+                        comp.SetRelease(release.Process());
+                        break;
+        
+        case od:        filter.SetFreq(cutoff.Process());
+                        overdrive.SetDrive(drive.Process());
+                        break;
+    }
+
+    //switches
+    knobmode = (hw.switches[Terrarium::SWITCH_1].Pressed()) ? od : compress;
+    ledmode = (hw.switches[Terrarium::SWITCH_2].Pressed()) ? compress : od;
 
 	//footswitch
     if(hw.switches[Terrarium::FOOTSWITCH_1].RisingEdge())
     {
-        bypass = !bypass;
+        bypassComp = !bypassComp;
+    }
+
+    if(hw.switches[Terrarium::FOOTSWITCH_2].RisingEdge())
+    {
+        bypassDrive = !bypassDrive;
     }
 	
-	dsy_gpio_write(&led1, !bypass);
+    //Led1
+	dsy_gpio_write(&led1, !bypassComp);
 
-	//Compression Indicator
-	float gain = comp.GetGain();
+    //Led2
+    float gain;
 
-	if (gain - makeup.Process() < -0.5f) //Checking whether applied gain  is less than -0.5dB (Without makeup gain)
-		dsy_gpio_write(&led2, true);
-	else 
-		dsy_gpio_write(&led2, false);
+    switch(ledmode){
+
+        case compress:  //Compression Indicator
+                        gain = comp.GetGain();
+
+                        if (gain - makeup.Process() < -0.5f) //Checking whether applied gain  is less than -0.5dB (Without makeup gain)
+                            dsy_gpio_write(&led2, true);
+                        else 
+                            dsy_gpio_write(&led2, false);
+
+                        break;
+        
+        case od:        dsy_gpio_write(&led2, !bypassDrive);
+                        break;
+    }
 
 }
 
 void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t size)
 {
-	float sig, dry_in;
+	float sig, hp, lp, drive_out;
 	ProcessControls();
 
     for(size_t i = 0; i < size; i++) {
         
-		if(bypass) {
-            out[0][i] = in[0][i];	
+		if(bypassComp) {
+            sig = in[0][i];	
         }
         else {
 			// Scales input by 2 and then the output by 0.5
     		// This is because there are 6dB of headroom on the daisy
     		// and currently no way to tell where '0dB' is supposed to be
-			dry_in = in[0][i] * 2.0f;
-			sig = comp.Process(dry_in);  
-            out[0][i]  = sig * 0.5f;        
+			sig = comp.Process(in[0][i] * 2.0f) * 0.5f;     
+        }
+
+        if(bypassDrive) {
+            out[0][i] = sig;	
+        }
+        else {
+			// Parrallel Process Lo and Hi sigs
+    		// Hi sigs are passed to overdrive
+    	
+			filter.Process(sig);
+            hp = filter.High();
+            lp = filter.Low();
+
+            drive_out = overdrive.Process(hp);
+
+            out[0][i]  = drive_out * mix.Process() + (1-mix.Process()) * lp;
         }
     }
 }
@@ -76,12 +135,21 @@ void Init(float samplerate)
 {
     comp.Init(samplerate);
 	comp.AutoMakeup(false);
+    overdrive.Init();
+    filter.Init(samplerate);
+    filter.SetFreq(500.0f);
 
-    attack.Init(hw.knob[Terrarium::KNOB_4], 0.01f, 1.0f, Parameter::EXPONENTIAL);
-    release.Init(hw.knob[Terrarium::KNOB_5], 0.01f, 1.0f, Parameter::EXPONENTIAL);
+    //k5.Init(hw.knob[Terrarium::KNOB_5], 0.01f, 1.0f, Parameter::EXPONENTIAL);
+    //k6.Init(hw.knob[Terrarium::KNOB_6], 0.01f, 1.0f, Parameter::EXPONENTIAL);
+    attack.Init(hw.knob[Terrarium::KNOB_5], 0.01f, 1.0f, Parameter::EXPONENTIAL);
+    release.Init(hw.knob[Terrarium::KNOB_6], 0.01f, 1.0f, Parameter::EXPONENTIAL);
     ratio.Init(hw.knob[Terrarium::KNOB_2], 1.0f, 40.0f, Parameter::EXPONENTIAL);
     threshold.Init(hw.knob[Terrarium::KNOB_1], -80.0f, 0.0f, Parameter::LINEAR);
     makeup.Init(hw.knob[Terrarium::KNOB_3], 1.0f, 40.0f, Parameter::LINEAR);  // log?
+
+    mix.Init(hw.knob[Terrarium::KNOB_4], 0.00f, 1.0f, Parameter::LINEAR);
+    drive.Init(hw.knob[Terrarium::KNOB_5], 0.0f, 0.5f, Parameter::LINEAR);
+    cutoff.Init(hw.knob[Terrarium::KNOB_6], 20.0f, 10000.0f, Parameter::EXPONENTIAL);
 }
 
 int main(void)
