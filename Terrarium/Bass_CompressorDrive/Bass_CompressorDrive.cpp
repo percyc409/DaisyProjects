@@ -18,8 +18,6 @@ Overdrive overdrive;
 Parameter ratio;
 Parameter threshold;
 Parameter makeup;
-//Parameter k5;  // Knob 5 -> Attack + Distortion
-//Parameter k6;  // Knob 6 -> Release + HP Cutoff
 Parameter attack;
 Parameter release;
 
@@ -31,6 +29,7 @@ bool bypassComp = true;
 bool bypassDrive = true;
 bool autogain = false;
 bool last_autogain = false;
+bool lpDry;
 
 enum modes {compress, od}; // K5+K6 Mode
 modes knobmode;
@@ -60,6 +59,7 @@ void ProcessControls() {
     //switches
     knobmode = (hw.switches[Terrarium::SWITCH_1].Pressed()) ? od : compress;
     ledmode = (hw.switches[Terrarium::SWITCH_2].Pressed()) ? compress : od;
+    lpDry = (hw.switches[Terrarium::SWITCH_3].Pressed()) ? true : false;
 
 	//footswitch
     if(hw.switches[Terrarium::FOOTSWITCH_1].RisingEdge())
@@ -126,7 +126,14 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 
             drive_out = overdrive.Process(hp);
 
-            out[0][i]  = drive_out * mix.Process() + (1-mix.Process()) * lp;
+            if(lpDry) {
+                out[0][i]  = drive_out * mix.Process() + (1-mix.Process()) * lp;
+            }
+            else {
+                out[0][i]  = drive_out * mix.Process() + (1-mix.Process()) * sig;
+            }
+
+            
         }
     }
 }
@@ -138,18 +145,17 @@ void Init(float samplerate)
     overdrive.Init();
     filter.Init(samplerate);
     filter.SetFreq(500.0f);
+    filter.SetRes(0.25f);
 
-    //k5.Init(hw.knob[Terrarium::KNOB_5], 0.01f, 1.0f, Parameter::EXPONENTIAL);
-    //k6.Init(hw.knob[Terrarium::KNOB_6], 0.01f, 1.0f, Parameter::EXPONENTIAL);
     attack.Init(hw.knob[Terrarium::KNOB_5], 0.01f, 1.0f, Parameter::EXPONENTIAL);
     release.Init(hw.knob[Terrarium::KNOB_6], 0.01f, 1.0f, Parameter::EXPONENTIAL);
     ratio.Init(hw.knob[Terrarium::KNOB_2], 1.0f, 40.0f, Parameter::EXPONENTIAL);
-    threshold.Init(hw.knob[Terrarium::KNOB_1], -80.0f, 0.0f, Parameter::LINEAR);
+    threshold.Init(hw.knob[Terrarium::KNOB_1], -50.0f, 0.0f, Parameter::LINEAR);
     makeup.Init(hw.knob[Terrarium::KNOB_3], 1.0f, 40.0f, Parameter::LINEAR);  // log?
 
     mix.Init(hw.knob[Terrarium::KNOB_4], 0.00f, 1.0f, Parameter::LINEAR);
-    drive.Init(hw.knob[Terrarium::KNOB_5], 0.0f, 0.5f, Parameter::LINEAR);
-    cutoff.Init(hw.knob[Terrarium::KNOB_6], 20.0f, 10000.0f, Parameter::EXPONENTIAL);
+    drive.Init(hw.knob[Terrarium::KNOB_5], 0.0f, 0.6f, Parameter::LINEAR);
+    cutoff.Init(hw.knob[Terrarium::KNOB_6], 50.0f, 2000.0f, Parameter::EXPONENTIAL);
 }
 
 int main(void)
