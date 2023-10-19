@@ -12,7 +12,7 @@ dsy_gpio led1;
 dsy_gpio led2;
 
 Compressor comp;
-Svf filter; // State Variable filter
+Svf filter, dryfilter; // State Variable filter
 Overdrive overdrive;
 
 Parameter ratio;
@@ -35,10 +35,42 @@ enum modes {compress, od}; // K5+K6 Mode
 modes knobmode;
 modes ledmode;
 
+//Saving knob 5 and 6 parameters to Flash
+struct Settings {
+    float atk;
+    float rel;
+    float dis;
+    float cof;
+
+    bool operator!=(const Settings& a) const {
+        return !(a.atk==atk && a.rel==rel && a.dis==dis && a.cof==cof);
+    }
+};
+
+PersistentStorage<Settings> SavedSettings(hw.seed.qspi);
+
+bool trigger_save = false;
+
+void Save_Settings(){
+    Settings &LocalSettings = SavedSettings.GetSettings();
+
+	LocalSettings.atk = comp.GetAttack();
+	LocalSettings.rel = comp.GetRelease();
+    LocalSettings.dis = drive.Value();
+    LocalSettings.cof = cutoff.Value();
+
+	trigger_save = true;
+}
+
 void ProcessControls() {
 
 	hw.ProcessAllControls();
 	
+    //Switches
+    knobmode = (hw.switches[Terrarium::SWITCH_1].Pressed()) ? od : compress;
+    ledmode = (hw.switches[Terrarium::SWITCH_2].Pressed()) ? compress : od;
+    lpDry = (hw.switches[Terrarium::SWITCH_3].Pressed()) ? true : false;
+
     //Single-Parameter Knobs
     comp.SetThreshold(threshold.Process());
     comp.SetRatio(ratio.Process());
@@ -56,12 +88,10 @@ void ProcessControls() {
                         break;
     }
 
-    //switches
-    knobmode = (hw.switches[Terrarium::SWITCH_1].Pressed()) ? od : compress;
-    ledmode = (hw.switches[Terrarium::SWITCH_2].Pressed()) ? compress : od;
-    lpDry = (hw.switches[Terrarium::SWITCH_3].Pressed()) ? true : false;
+    if(hw.switches[Terrarium::SWITCH_1].FallingEdge())
+        Save_Settings();
 
-	//footswitch
+	//Footswitch
     if(hw.switches[Terrarium::FOOTSWITCH_1].RisingEdge())
     {
         bypassComp = !bypassComp;
@@ -96,6 +126,7 @@ void ProcessControls() {
 
 }
 
+
 void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t size)
 {
 	float sig, hp, lp, drive_out;
@@ -113,7 +144,7 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
     		// and currently no way to tell where '0dB' is supposed to be
 			sig = comp.Process(in[0][i] * 2.0f) * 0.5f;     
         }
-
+ 
         if(bypassDrive) {
             out[0][i] = sig;	
         }
@@ -122,8 +153,9 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
     		// Hi sigs are passed to overdrive
     	
 			filter.Process(sig);
+            dryfilter.Process(sig);
             hp = filter.High();
-            lp = filter.Low();
+            lp = dryfilter.Low();
 
             drive_out = overdrive.Process(hp);
 
@@ -139,18 +171,28 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 
 void Init(float samplerate)
 {
+    Settings &LocalSettings = SavedSettings.GetSettings();
+
     comp.Init(samplerate);
 	comp.AutoMakeup(false);
-    overdrive.Init();
-    filter.Init(samplerate);
-    filter.SetFreq(500.0f);
-    filter.SetRes(0.0f);
+    comp.SetAttack(LocalSettings.atk);
+    comp.SetRelease(LocalSettings.rel);
 
-    attack.Init(hw.knob[Terrarium::KNOB_5], 0.01f, 1.0f, Parameter::EXPONENTIAL);
-    release.Init(hw.knob[Terrarium::KNOB_6], 0.01f, 1.0f, Parameter::EXPONENTIAL);
-    ratio.Init(hw.knob[Terrarium::KNOB_2], 1.0f, 40.0f, Parameter::EXPONENTIAL);
+    overdrive.Init();
+    overdrive.SetDrive(LocalSettings.dis);
+
+    filter.Init(samplerate);
+    filter.SetFreq(LocalSettings.cof);
+    filter.SetRes(0.0f);
+    dryfilter.Init(samplerate);
+    dryfilter.SetFreq(140.0f);
+    dryfilter.SetRes(0.1f);
+
     threshold.Init(hw.knob[Terrarium::KNOB_1], -50.0f, 0.0f, Parameter::LINEAR);
-    makeup.Init(hw.knob[Terrarium::KNOB_3], 1.0f, 40.0f, Parameter::LINEAR);
+    ratio.Init(hw.knob[Terrarium::KNOB_2], 1.0f, 40.0f, Parameter::EXPONENTIAL);
+    makeup.Init(hw.knob[Terrarium::KNOB_3], 1.0f, 20.0f, Parameter::LINEAR);
+    attack.Init(hw.knob[Terrarium::KNOB_5], 0.01f, 0.6f, Parameter::EXPONENTIAL);
+    release.Init(hw.knob[Terrarium::KNOB_6], 0.01f, 0.6f, Parameter::EXPONENTIAL);
 
     driveLevel.Init(hw.knob[Terrarium::KNOB_4], 0.00f, 1.0f, Parameter::EXPONENTIAL);
     drive.Init(hw.knob[Terrarium::KNOB_5], 0.0f, 0.8f, Parameter::LINEAR);
@@ -162,6 +204,10 @@ int main(void)
 	hw.Init();
 	hw.SetAudioBlockSize(4); // number of samples handled per callback
 	hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
+
+    Settings DefaultSettings = {0.01f, 0.01f, 0.0f, 200.0f};
+	SavedSettings.Init(DefaultSettings);
+
 	Init(hw.AudioSampleRate());
 	hw.StartAdc();
 	hw.StartAudio(AudioCallback);
@@ -176,5 +222,14 @@ int main(void)
     led2.pull = DSY_GPIO_NOPULL;
     dsy_gpio_init(&led2);
 
-	while(1) {}
+	while(1) {
+        
+        if(trigger_save) {
+			
+			SavedSettings.Save(); // Writing locally stored settings to the external flash
+			trigger_save = false;
+		}
+
+		System::Delay(100);
+    }
 }

@@ -10,6 +10,8 @@ python ../DaisyExamples/helper.py create Terrarium/<projFolder> --board petal -l
 Pod Project: 
 python ../DaisyExamples/helper.py create Pod/<projFolder> --board pod -l ../DaisyExamples/
 
+Copying Terrarium Template:
+python ../DaisyExamples/helper.py copy Terrarium/MyNewProject --source Terrarium/Template
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
 Building Project: 
 Ctrl-shift-B

@@ -2,7 +2,7 @@
 
 ## Author
 
-<!-- Insert Your Name Here -->
+C Hershy
 
 ## Description
 
@@ -34,4 +34,7 @@ Controls
 Notes
 -----------------------------------------------------------------------------
 
-*Annoying having to adjust attack and release again everytime i turn it on and off. Wonder if there is a way to save settings between turning on and off
+* Release may not be needed. Could set static and reassign control
+* Overdrive signal is too brittle, need to control the high end of the drive better
+* Oversampling?
+* Need to work on the LO/HIGH frequency splitter. Perhaps replace Cutoff freq knob with switches

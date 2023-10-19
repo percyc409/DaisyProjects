@@ -1,0 +1,13 @@
+{
+    "files.associations": {
+        "cwchar": "cpp",
+        "functional": "cpp",
+        "initializer_list": "cpp",
+        "iosfwd": "cpp",
+        "mutex": "cpp",
+        "new": "cpp",
+        "type_traits": "cpp",
+        "utility": "cpp",
+        "cmath": "cpp"
+    }
+}
