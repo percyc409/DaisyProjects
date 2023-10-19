@@ -1,8 +1,8 @@
 # Project Name
-TARGET = Bass_CompressorDrive
+TARGET = FrequencySplitter
 
 # Sources
-CPP_SOURCES = Bass_CompressorDrive.cpp highshelf.cpp
+CPP_SOURCES = FrequencySplitter.cpp
 
 # Library Locations
 LIBDAISY_DIR = ../../../DaisyExamples/libDaisy/

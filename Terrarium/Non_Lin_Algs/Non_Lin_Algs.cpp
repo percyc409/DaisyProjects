@@ -16,11 +16,16 @@ dsy_gpio led2;
 Oversampling<4,1> Oversampling_o;
 Highshelf Pre_emphasis, Post_filt;
 
+Overdrive overdrive;
+
 Parameter gain;
 Parameter volume;
+Parameter driveLevel; // between distorted and clean sig (Ignored when overdrive is off)
+Parameter drive;
 
 int nl_alg;
 bool bypass = true;
+bool dsy_drive;
 
 void ProcessControls() {
 	
@@ -29,12 +34,16 @@ void ProcessControls() {
 	//knobs
 	gain.Process();
 	volume.Process();
+  	overdrive.SetDrive(drive.Process());
+    driveLevel.Process();
 
 	//switches
 	nl_alg = (hw.switches[Terrarium::SWITCH_2].Pressed()) ? 1 : 0;
 	
 	if ((hw.switches[Terrarium::SWITCH_1].Pressed())) 
 		nl_alg += 2;
+
+	dsy_drive = (hw.switches[Terrarium::SWITCH_3].Pressed()) ? true : false;
 
 	//footswitches
     if(hw.switches[Terrarium::FOOTSWITCH_1].RisingEdge())
@@ -110,7 +119,10 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 
 			ovrsmp_arr[0][i] = Pre_emphasis.Process(ovrsmp_arr[0][i]);
 
-			ovrsmp_arr[0][i] = NonLinearProcess(ovrsmp_arr[0][i]);
+			if(dsy_drive)
+				ovrsmp_arr[0][i] = overdrive.Process(ovrsmp_arr[0][i]) * driveLevel.Value();
+			else
+				ovrsmp_arr[0][i] = NonLinearProcess(ovrsmp_arr[0][i]);
 
 			ovrsmp_arr[0][i] = Post_filt.Process(ovrsmp_arr[0][i]);
 
@@ -134,9 +146,12 @@ int main(void)
 	Post_filt.SetFreq(8000.0f);
 	Pre_emphasis.SetGain(36.0F);
 	Post_filt.SetGain(-36.0F);
+	overdrive.Init();
 
 	gain.Init(hw.knob[Terrarium::KNOB_1], 1.0f, 30.0f, Parameter::LINEAR);
 	volume.Init(hw.knob[Terrarium::KNOB_2], 0.0f, 1.5f, Parameter::EXPONENTIAL);
+	driveLevel.Init(hw.knob[Terrarium::KNOB_5], 0.00f, 1.0f, Parameter::EXPONENTIAL);
+    drive.Init(hw.knob[Terrarium::KNOB_4], 0.0f, 0.8f, Parameter::LINEAR);
 
 	hw.StartAdc();
 	hw.StartAudio(AudioCallback);
