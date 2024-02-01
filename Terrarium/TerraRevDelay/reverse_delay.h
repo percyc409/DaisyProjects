@@ -3,8 +3,8 @@
 
 #define MAX_DELAY static_cast<size_t>(48000 * 3.5f)
 #define MIN_DELAY static_cast<size_t>(48000 * 0.05f)
-#define REV_BLOCK_SIZE static_cast<size_t>(48000 * 0.5f)
-#define MAX_REV_DELAY static_cast<size_t>(48000 * 4.5f)  // Max delay + 2 * Rev_block_length
+#define REV_BLOCK_SIZE static_cast<size_t>(48000 * 0.3f)
+//#define MAX_REV_DELAY static_cast<size_t>(48000 * 4.5f)  // Max delay + 2 * Rev_block_length
 
 namespace daisysp
 {
@@ -16,7 +16,7 @@ class reverse_delay
 		reverse_delay() {}
 		~reverse_delay() {}
 
-		DelayLine<float, MAX_REV_DELAY> *revDel;
+		DelayLine<float, MAX_DELAY> *revDel;
 		DelayLine<float, MAX_DELAY> *del;
 
 		void Init(size_t rev_block_len) {
@@ -27,16 +27,16 @@ class reverse_delay
 		void ResetRead() { revBlockPos = 0; }
 
 		void SetDelay(float d) {
-			delayTarget = d;
+			delayTarget = (d > MAX_DELAY) ? MAX_DELAY : (d < MIN_DELAY + REV_BLOCK_SIZE) ? (MIN_DELAY + REV_BLOCK_SIZE) : d;
 		}
 
 		void SetFeedback(float f) {
-			feedback = f;
+			feedback = (f > 1.0f) ? 1.0f : (f < 0.0f) ? 0.0f : f;
 		}
 
 		float ProcessRev(float in) {
 
-			float readDelay = currentDelay + (float)revBlockPos*2.0f;
+			float readDelay = currentDelay - revBlockLength + (float)revBlockPos*2.0f;
 			float revread = revDel->Read(readDelay);
 
 			//Apply Gain function

@@ -10,37 +10,16 @@ using namespace terrarium;
 
 #define MAX_DELAY static_cast<size_t>(48000 * 3.5f)
 #define MIN_DELAY static_cast<size_t>(48000 * 0.05f)
-#define REV_BLOCK_SIZE static_cast<size_t>(48000 * 0.5f)
-#define MAX_REV_DELAY static_cast<size_t>(48000 * 4.5f)  // Max delay + 2 * Rev_block_length
+#define REV_BLOCK_SIZE static_cast<size_t>(48000 * 0.3f)
+//#define MAX_REV_DELAY static_cast<size_t>(48000 * 4.5f)  // Max delay + 2 * Rev_block_length
 
 DaisyPetal hw;
 dsy_gpio led1;
 dsy_gpio led2;
 
 DelayLine<float, MAX_DELAY> DSY_SDRAM_BSS delmem;
-DelayLine<float, MAX_REV_DELAY> DSY_SDRAM_BSS revdelmem;
-Tap_Tempo<MIN_DELAY, MAX_DELAY> time_tt;
-
-/*
-struct delay
-{
-    DelayLine<float, MAX_DELAY> *del;
-    float currentDelay;
-    float delayTarget;
-    float feedback; 
-
-    float Process(float in)
-    {
-        //set delay times
-        fonepole(currentDelay, delayTarget, .0002f);
-        del->SetDelay(currentDelay);
-
-        float read = del->Read();
-        del->Write((feedback * read) + in);
-
-        return read;
-    }
-};*/
+DelayLine<float, MAX_DELAY> DSY_SDRAM_BSS revdelmem;
+Tap_Tempo<MIN_DELAY + REV_BLOCK_SIZE, MAX_DELAY> time_tt;
 
 
 reverse_delay delay_fx;
@@ -125,7 +104,7 @@ void Init() {
 	delay_fx.revDel = &revdelmem;
 	delay_fx.Init(REV_BLOCK_SIZE);
 
-	time.Init(hw.knob[Terrarium::KNOB_1], MIN_DELAY, MAX_DELAY, Parameter::LOGARITHMIC);
+	time.Init(hw.knob[Terrarium::KNOB_1], MIN_DELAY + REV_BLOCK_SIZE, MAX_DELAY, Parameter::LOGARITHMIC);
 	feedback.Init(hw.knob[Terrarium::KNOB_2], 0.0f, 1.0f, Parameter::LINEAR);
 	mix.Init(hw.knob[Terrarium::KNOB_3], 0.0f, 1.0f, Parameter::EXPONENTIAL);
 
