@@ -3,6 +3,7 @@
 #include "terrarium.h"
 #include "highshelf.h"
 #include <string>
+#include "arm_math.h"
 
 using namespace daisy;
 using namespace daisysp;
@@ -61,16 +62,16 @@ void ProcessControls() {
 	//Footswitch
     if(hw.switches[Terrarium::FOOTSWITCH_1].RisingEdge())
     {
-        bypassComp = !bypassComp;
+        bypassDrive = !bypassDrive;
     }
 
     if(hw.switches[Terrarium::FOOTSWITCH_2].RisingEdge())
     {
-        bypassDrive = !bypassDrive;
+        bypassComp = !bypassComp;
     }
 	
     //Led1
-	dsy_gpio_write(&led1, !bypassComp);
+	dsy_gpio_write(&led2, !bypassComp);
 
     //Led2
     float gain;
@@ -81,12 +82,12 @@ void ProcessControls() {
                         gain = comp.GetGain();
 
                         if (gain - makeup.Process() < -0.5f) // Checking whether applied gain  is less than -0.5dB (Without makeup gain)
-                            dsy_gpio_write(&led2, true);
+                            dsy_gpio_write(&led1, true);
                         else 
-                            dsy_gpio_write(&led2, false);
+                            dsy_gpio_write(&led1, false);
                         break;
         
-        case od:        dsy_gpio_write(&led2, !bypassDrive);
+        case od:        dsy_gpio_write(&led1, !bypassDrive);
                         break;
     }
 
