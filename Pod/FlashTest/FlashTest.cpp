@@ -46,7 +46,7 @@ void Save() {
 	//Reference to local copy of settings stored in flash
 	Settings &LocalSettings = SavedSettings.GetSettings();
 
-	LocalSettings.p1 = DryWet;
+	LocalSettings.p1 = hw.knob1.Process();
 	LocalSettings.p2 = Feedback.Value();
 
 	trigger_save = true;
