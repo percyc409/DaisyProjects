@@ -7,24 +7,35 @@ using namespace daisy;
 using namespace daisysp;
 using namespace terrarium;
 
-#define MAX_DELAY static_cast<size_t>(48000 * 2.5f)
-#define MIN_DELAY static_cast<size_t>(48000 * 0.05f)
+#define MAX_DELAY static_cast<size_t>(48000 * 1.8f)  // 2.2s in samples
+#define MIN_DELAY static_cast<size_t>(48000 * 0.1f)  // 100ms in samples
+#define MAX_MOD    48000 * 0.003f                    // 3ms in samples
+#define MIN_OFFSET 48000 * 0.003f                    // 5ms in samples
+#define MAX_OFFSET 48000 * 0.025f                    // 25ms in samples
+#define DELAYLINE_LEN static_cast<size_t>(MAX_DELAY+MAX_OFFSET+MAX_MOD)
+
 
 DaisyPetal hw;
 dsy_gpio led1;
 dsy_gpio led2;
 
-DelayLine<float, MAX_DELAY> DSY_SDRAM_BSS delmem;
+DelayLine<float, DELAYLINE_LEN> DSY_SDRAM_BSS delmem;
 Tap_Tempo<MIN_DELAY, MAX_DELAY> time_tt;
 Oscillator lfo;
+
 float lfo_val;
 
-struct delay
+
+// Struct to define Modulated Delay struct
+
+struct mod_delay
 {
-    DelayLine<float, MAX_DELAY> *del;
+    DelayLine<float, DELAYLINE_LEN> *del;
     float currentDelay;
     float delayTarget;
     float feedback;
+	float offset;
+	bool chorus; // Vibrato or Chorus/Flanger switch
 
     float Process(float in)
     {
@@ -32,20 +43,36 @@ struct delay
         fonepole(currentDelay, delayTarget, .0002f);
         del->SetDelay(currentDelay);
 
-        float read = del->Read();
-        del->Write((feedback * read) + in);
+		float fx_out;
+        
+		if (chorus) {
 
-        return read;
+			float dry_read = del->Read(currentDelay);
+			float wet_read = del->Read(currentDelay + offset + lfo_val);
+			fx_out = feedback * 0.6f * (dry_read + wet_read);
+
+		} else {
+			
+			fx_out = feedback * del->Read(currentDelay + lfo_val);
+
+		}
+
+        del->Write(fx_out + in);
+
+        return fx_out;
     }
 };
 
-delay delay_fx;
+
+
+mod_delay delay_fx;
 
 Parameter time;
 Parameter feedback;
 Parameter mix;
 Parameter modRate;
 Parameter modDepth;
+Parameter modOffset;
 
 int time_old;
 bool bypass = true;
@@ -57,25 +84,31 @@ void ProcessControls() {
 
 	//knobs
 	delay_fx.feedback = feedback.Process();
+	delay_fx.offset = modOffset.Process();
 	mix.Process();
 	lfo.SetAmp(modDepth.Process());
 	lfo.SetFreq(modRate.Process());
 
 	if(time_tt.Use_tt()) {
-		delay_fx.delayTarget = time_tt.Count_Avg() + lfo_val;
+		delay_fx.delayTarget = time_tt.Count_Avg();
 
 		if (abs (time_old - time.Process()) > 8000)
 			time_tt.Stop_tt();
 
 	} else
-		delay_fx.delayTarget = time.Process() + lfo_val;
+		delay_fx.delayTarget = time.Process();
 
 	//switches
 
-	if(hw.switches[Terrarium::SWITCH_1].Pressed()) 
+	if(hw.switches[Terrarium::SWITCH_2].Pressed()) 
         lfo.SetWaveform(lfo.WAVE_TRI);
     else
 		lfo.SetWaveform(lfo.WAVE_SIN);
+
+	if(hw.switches[Terrarium::SWITCH_1].Pressed()) 
+        delay_fx.chorus = true;
+    else
+		delay_fx.chorus = false;
 
 	//footswitch
     if(hw.switches[Terrarium::FOOTSWITCH_1].RisingEdge())
@@ -123,11 +156,12 @@ void Init() {
 	delmem.Init();
 	delay_fx.del = &delmem;
 
-	time.Init(hw.knob[Terrarium::KNOB_1], MIN_DELAY, MAX_DELAY, Parameter::LOGARITHMIC);
-	feedback.Init(hw.knob[Terrarium::KNOB_2], 0.0f, 1.0f, Parameter::LINEAR);
+	time.Init(hw.knob[Terrarium::KNOB_1], MIN_DELAY, MAX_DELAY, Parameter::EXPONENTIAL);
+	feedback.Init(hw.knob[Terrarium::KNOB_2], 0.0f, 1.0f, Parameter::EXPONENTIAL);
 	mix.Init(hw.knob[Terrarium::KNOB_3], 0.0f, 1.0f, Parameter::EXPONENTIAL);
-	modRate.Init(hw.knob[Terrarium::KNOB_4], 0.2f, 5.0f, Parameter::LINEAR);
-	modDepth.Init(hw.knob[Terrarium::KNOB_5], 0.0f, 300.0f, Parameter::LINEAR);
+	modRate.Init(hw.knob[Terrarium::KNOB_4], .6f, 10.0f, Parameter::EXPONENTIAL);
+	modDepth.Init(hw.knob[Terrarium::KNOB_5], 0.0f, MAX_MOD, Parameter::EXPONENTIAL);
+	modOffset.Init(hw.knob[Terrarium::KNOB_6], MIN_OFFSET, MAX_OFFSET, Parameter::LINEAR);
 
 	time_tt.Init(hw.AudioSampleRate(), hw.AudioBlockSize());
 
