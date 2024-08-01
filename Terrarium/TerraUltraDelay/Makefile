@@ -1,10 +1,8 @@
 # Project Name
-TARGET = Bass_CompressorDrive
-
-USE_DAISYSP_LGPL=1
+TARGET = TerraUltraDelay
 
 # Sources
-CPP_SOURCES = Bass_CompressorDrive.cpp highshelf.cpp
+CPP_SOURCES = TerraUltraDelay.cpp
 
 # Library Locations
 LIBDAISY_DIR = ../../../DaisyExamples/libDaisy/
