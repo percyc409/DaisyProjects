@@ -3,6 +3,7 @@
 #include "terrarium.h"
 #include "taptempo.h"
 #include "reverse_delay.h"
+#include "delayline_reverse.h"
 
 using namespace daisy;
 using namespace daisysp;
@@ -19,6 +20,7 @@ dsy_gpio led2;
 
 DelayLine<float, MAX_DELAY> DSY_SDRAM_BSS delmem;
 DelayLine<float, MAX_DELAY> DSY_SDRAM_BSS revdelmem;
+DelayLineReverse<float, MAX_DELAY> nu_rev_delay;
 Tap_Tempo<MIN_DELAY + REV_BLOCK_SIZE, MAX_DELAY> time_tt;
 
 
@@ -31,6 +33,7 @@ Parameter mix;
 int time_old;
 bool bypass = true;
 bool reverseEcho;
+bool rev_echo_alg;
 
 void ProcessControls() {
 	
@@ -52,7 +55,8 @@ void ProcessControls() {
 
 	
 	//Switch 
-	reverseEcho = (hw.switches[Terrarium::SWITCH_1].Pressed()) ? true : false;
+	reverseEcho  = (hw.switches[Terrarium::SWITCH_1].Pressed()) ? true : false;
+	rev_echo_alg = (hw.switches[Terrarium::SWITCH_2].Pressed()) ? true : false;
 
 	//footswitch
     if(hw.switches[Terrarium::FOOTSWITCH_1].RisingEdge())
@@ -100,6 +104,7 @@ void Init() {
 
 	delmem.Init();
 	revdelmem.Init();
+	nu_rev_delay.Init();
 	delay_fx.del = &delmem;
 	delay_fx.revDel = &revdelmem;
 	delay_fx.Init(REV_BLOCK_SIZE);

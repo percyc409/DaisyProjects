@@ -2,30 +2,34 @@
 #include "daisysp.h"
 #include "terrarium.h"
 #include "nfctsm_pitch.h"
+#include "../../Utils/pitch_shifter166.h"
+
+#define MAX_ATTACK static_cast<size_t>(1000 * 2.0f) // SR/size * 2seconds
 
 using namespace daisy;
 using namespace daisysp;
 using namespace terrarium;
 
 DaisyPetal hw;
-PitchShifter ps;
-nfctsm_pitch my_ps;
 
-Parameter DryVol;
-Parameter WetVol;
+daisysp_modified::PitchShifter166 ps;
+nfctsm_pitch my_ps;
+CrossFade crossfade;
+
+Parameter Mix;
 Parameter Shift;
+Parameter Attack;
 
 dsy_gpio led1;
 dsy_gpio led2;
 
 bool bypass = true;
 bool ps_mode = true;
-bool filterOn;
 bool jumpAlg;
 bool normalise;
-bool use_hp;
-
-OnePole delay_lp;
+bool whammy;
+bool whammying;
+int whammy_count = 0;
 
 void ProcessControls() {
 	
@@ -34,37 +38,71 @@ void ProcessControls() {
 	float shift_semi;
 	float shift_ratio;
 
-	shift_semi = round(Shift.Process());
-	shift_ratio = powf(2.0f, shift_semi/12.0f);
-
-	ps.SetTransposition(shift_semi);
-	//my_ps.SetPitch(shift_ratio);
-	my_ps.SetSemitones(static_cast<int>(shift_semi));
 
 	//footswitch
-
-
     if(hw.switches[Terrarium::FOOTSWITCH_1].RisingEdge())
     {
         bypass = !bypass;
     }
 
-	if(hw.switches[Terrarium::FOOTSWITCH_2].RisingEdge())
-    {
-        ps_mode = !ps_mode;
-    }
+	//Momentary whammy effect
+	whammy = hw.switches[Terrarium::FOOTSWITCH_2].Pressed() ? true : false;
 
-	filterOn  = hw.switches[Terrarium::SWITCH_1].Pressed() ? true : false;
+
+	//Knobs
+	crossfade.SetPos(Mix.Process());
+	shift_semi = round(Shift.Process());
+	int whammy_target = round(Attack.Process());
+
+	if (!bypass) {
+		ps.SetTransposition(shift_semi);
+	} else {
+
+		if(whammy) { //Footswitch2 is pressed
+			
+			whammying = true;
+
+			if (whammy_count < whammy_target) {
+				whammy_count++;
+				shift_ratio = (static_cast<float>(whammy_count)/whammy_target)*shift_semi;
+			} else {
+				shift_ratio = shift_semi;
+			}
+
+			ps.SetTransposition(shift_ratio);
+
+		} else {
+
+			if(whammying) { //Footswitch2 released
+				whammy_count--;
+
+				if (whammy_count <= 0) {
+					whammying = false;
+					whammy_count = 0;
+				}
+
+				shift_ratio = (static_cast<float>(whammy_count)/whammy_target)*shift_semi;
+				ps.SetTransposition(shift_ratio);
+			}
+		}
+	}
+
+	
+	//shift_ratio = powf(2.0f, shift_semi/12.0f);
+
+	my_ps.SetSemitones(static_cast<int>(shift_semi));
+	
+
+	ps_mode   = hw.switches[Terrarium::SWITCH_1].Pressed() ? true : false;
 	jumpAlg   = hw.switches[Terrarium::SWITCH_2].Pressed() ? true : false;
 	normalise = hw.switches[Terrarium::SWITCH_3].Pressed() ? true : false;
-	use_hp    = hw.switches[Terrarium::SWITCH_4].Pressed() ? true : false;
+
 
 	my_ps.SetAlg(jumpAlg);
-	my_ps.UseHp(use_hp);
 	my_ps.SetNorm(normalise);
 	
 	dsy_gpio_write(&led1, !bypass);
-	dsy_gpio_write(&led2, ps_mode);
+	dsy_gpio_write(&led2, whammying);
 
 }
 
@@ -77,7 +115,7 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 
 	for (size_t i = 0; i < size; i++) {
 		
-		if (bypass) {
+		if (bypass && !whammying) {
 			out[0][i] = in[0][i];
 			out[1][i] = in[1][i];
 		}
@@ -86,21 +124,14 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 			dry = in[0][i];
 
 			if (ps_mode) {
-				fx_out = my_ps.Process(dry);
-				
-				if(filterOn) {
-					fx_out = delay_lp.Process(fx_out);
-				}
-
-			} else {
 				fx_out = ps.Process(dry);
 
-			    if(filterOn) {
-					fx_out = delay_lp.Process(fx_out);
-				}
+
+			} else {
+				fx_out = my_ps.Process(dry);
 			}	
 
-			out[0][i] = fx_out * WetVol.Process() + dry * DryVol.Process();
+			out[0][i] = crossfade.Process(dry, fx_out);
 		}
 	}
 }
@@ -113,12 +144,12 @@ int main(void)
 
 	ps.Init(hw.AudioSampleRate());
 	my_ps.Init();
-	delay_lp.Init();
-	delay_lp.SetFrequency(0.0625f);
 
-	DryVol.Init(hw.knob[Terrarium::KNOB_1], 0.0f, 1.0f, Parameter::EXPONENTIAL);
-	WetVol.Init(hw.knob[Terrarium::KNOB_2], 0.0f, 1.0f, Parameter::EXPONENTIAL);
-	Shift.Init(hw.knob[Terrarium::KNOB_3], -12.0f, 12.0f, Parameter::LINEAR);
+	crossfade.Init(CROSSFADE_CPOW);
+
+	Mix.Init(hw.knob[Terrarium::KNOB_1], 0.0f, 1.0f, Parameter::LINEAR);
+	Shift.Init(hw.knob[Terrarium::KNOB_2], -12.0f, 12.0f, Parameter::LINEAR);
+	Attack.Init(hw.knob[Terrarium::KNOB_3], 5, MAX_ATTACK, Parameter::LINEAR);
 
 	hw.StartAdc();
 	hw.StartAudio(AudioCallback);

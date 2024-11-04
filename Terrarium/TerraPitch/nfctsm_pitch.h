@@ -3,7 +3,6 @@
 
 #pragma once
 #include "daisysp.h"
-#include "highpass.h"
 #include "EnvelopeFollower.h"
 #include <stdlib.h>
 
@@ -33,19 +32,14 @@ class nfctsm_pitch
 
             lp_filt.Init();
             lp_filt.SetFrequency(0.01875f); // 800Hz
-            hp_filt.Init(48000.0f);
-            hp_filt.SetFreq(60); // 70Hz
             env_flwr.Setup(48000, 50, 100);
         }
 
         float Process(float &in) {
 
             // Write to Buffer
-            if (hp) {
-                audio_buffer[wr_ptr] = hp_filt.Process(in);
-            } else {
-                audio_buffer[wr_ptr] = in;
-            }
+
+            audio_buffer[wr_ptr] = in;
 
             float lp_in = lp_filt.Process(in);
 
@@ -131,7 +125,6 @@ class nfctsm_pitch
 
         inline void SetAlg(bool a){jumpalg = a; }
 
-        inline void UseHp(bool a){hp = a; }
 
         inline void SetNorm(bool a){normalise = a; }
 
@@ -162,12 +155,12 @@ class nfctsm_pitch
             volatile size_t min_i = 0;
             volatile float sw;      
 
+            start_cw = static_cast<int>(round(rd_ptr));
+
             if (shift_up) {
-                start_cw = (static_cast<int>(round(rd_ptr)) - L_CORR_WIN + 1) % BUF_SIZE;
-                start_sw = (wr_ptr - MAX_T - L_CORR_WIN - MIN_DELAY + BUF_SIZE) % BUF_SIZE;
+                start_sw = (wr_ptr - MAX_T - MIN_DELAY + BUF_SIZE) % BUF_SIZE;
             }
-            else {
-                start_cw = static_cast<int>(round(rd_ptr));
+            else {    
                 start_sw = (wr_ptr - MAX_T + BUF_SIZE) % BUF_SIZE;
             }
 
@@ -197,16 +190,10 @@ class nfctsm_pitch
             }
 
             //Update Pointers
-            cf_rd_ptr = rd_ptr;
-            
-            if (shift_up) {
-                rd_ptr = (start_sw + min_i + L_CORR_WIN - 1) % BUF_SIZE;
-            } else {
-                rd_ptr = (start_sw + min_i) % BUF_SIZE;
-            }
+            cf_rd_ptr = rd_ptr;  
+            rd_ptr = (start_sw + min_i) % BUF_SIZE;     
 
             crossfading = true;
-            update_rd_ptr = false;
         }
 
     protected:
@@ -224,7 +211,6 @@ class nfctsm_pitch
 
 
         OnePole lp_filt;
-        Highpass hp_filt;
         EnvelopeFollower< 1, float> env_flwr;
 
         const static size_t MAX_DELAY = 1600;
@@ -246,7 +232,6 @@ class nfctsm_pitch
         bool shift_up;
 
         bool jumpalg;
-        bool hp;
         bool normalise;
 
         bool  crossfading;

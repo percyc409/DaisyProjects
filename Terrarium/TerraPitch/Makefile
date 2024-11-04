@@ -2,7 +2,10 @@
 TARGET = TerraPitch
 
 # Sources
-CPP_SOURCES = TerraPitch.cpp highpass.cpp
+CPP_SOURCES = TerraPitch.cpp
+
+#Utils
+C_INCLUDES = -I ../../Utils/
 
 # Library Locations
 LIBDAISY_DIR = ../../../DaisyExamples/libDaisy/

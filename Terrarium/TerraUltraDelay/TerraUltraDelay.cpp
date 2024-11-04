@@ -25,7 +25,7 @@ DelayLine<float, DELAYLINE_LEN> DSY_SDRAM_BSS delmem;
 DelayLineReverse<float, DELAYLINE_LEN> DSY_SDRAM_BSS rev_delmem;
 Tap_Tempo<MIN_DELAY, MAX_DELAY> time_tt;
 Oscillator lfo;
-nfctsm_pitch PitchShift;
+;
 OnePole delay_lp;
 
 float lfo_val;
@@ -33,10 +33,11 @@ float lfo_val;
 
 // Struct to define Modulated Delay struct
 
-struct mod_delay
+struct ultra_mod_delay
 {
     DelayLine<float, DELAYLINE_LEN> *del;
 	DelayLineReverse<float, DELAYLINE_LEN> *rev_del;
+	nfctsm_pitch PitchShift;
 	
     float currentDelay;
     float delayTarget;
@@ -44,6 +45,9 @@ struct mod_delay
 	float offset;
 	bool chorus; // Vibrato or Chorus/Flanger switch
 	bool rev_en;
+	bool ps_en;
+	bool fb_shift;
+	float ps_fb = 0.0f;
 
     float Process(float in)
     {
@@ -52,12 +56,21 @@ struct mod_delay
         del->SetDelay(currentDelay);
 		rev_del->SetDelay1(currentDelay);
 
-		float fx_out;
+		float fx_out, fx_in, dl_fb;
 		float rev_out = 0.0f;
+		
+		fx_in = in + ps_fb;
 
 		if (rev_en) {
 			rev_out = feedback * rev_del->ReadRev();
-			rev_del->Write(in);
+			rev_del->Write(fx_in);
+
+			if (ps_en) {
+				rev_out = PitchShift.Process(rev_out + ps_fb);
+			}
+		}
+		else if (ps_en) {
+			fx_in = PitchShift.Process(fx_in + ps_fb);
 		}
         
 		if (chorus) {
@@ -72,19 +85,27 @@ struct mod_delay
 
 		}
 
-		if (rev_en) {
-        	del->Write(fx_out + rev_out);
+		if (ps_en && fb_shift) {
+			dl_fb = 0.0f;
+			ps_fb = fx_out;
 		} else {
-			del->Write(fx_out + in);
+			dl_fb = fx_out;
+			ps_fb = 0.0f;
 		}
 
-        return fx_out;
+		if (rev_en) {
+        	del->Write(dl_fb + rev_out);
+		} else {
+			del->Write(dl_fb + fx_in);
+		}
+
+        return fx_out + rev_out;
     }
 };
 
 
 
-mod_delay delay_fx;
+ultra_mod_delay delay_fx;
 
 Parameter time;
 Parameter feedback;
@@ -95,8 +116,6 @@ Parameter Pitch;
 
 float time_old;
 bool bypass = true;
-bool ps_en;
-bool fb_shift;
 
 void ProcessControls() {
 	
@@ -109,7 +128,7 @@ void ProcessControls() {
 	lfo.SetAmp(modDepth.Process());
 	lfo.SetFreq(modRate.Process());
 
-	PitchShift.SetSemitones(static_cast<int>(round(Pitch.Process())));
+	delay_fx.PitchShift.SetSemitones(static_cast<int>(round(Pitch.Process())));
 
 	if(time_tt.Use_tt()) {
 		delay_fx.delayTarget = time_tt.Count_Avg();
@@ -133,14 +152,14 @@ void ProcessControls() {
 		delay_fx.rev_en = false;
 
 	if(hw.switches[Terrarium::SWITCH_3].Pressed()) 
-        ps_en = true;
+        delay_fx.ps_en = true;
     else
-		ps_en = false;
+		delay_fx.ps_en = false;
 
 	if(hw.switches[Terrarium::SWITCH_4].Pressed()) 
-        delay_fx.chorus = true;
+        delay_fx.fb_shift = true;
     else
-		delay_fx.chorus = false;
+		delay_fx.fb_shift = false;
 
 	//footswitch
     if(hw.switches[Terrarium::FOOTSWITCH_1].RisingEdge())
@@ -177,11 +196,6 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 		else {
 
 			fx_in = in[0][i];
-
-			if (ps_en) {
-				fx_in = PitchShift.Process(fx_in);
-				fx_in = delay_lp.Process(fx_in);
-			} 
 			
 			fx_out = delay_fx.Process(fx_in);
 			
@@ -202,14 +216,14 @@ void Init() {
 	delay_lp.SetFrequency(0.0625f);
 
 	time.Init(hw.knob[Terrarium::KNOB_1], MIN_DELAY, MAX_DELAY, Parameter::EXPONENTIAL);
-	feedback.Init(hw.knob[Terrarium::KNOB_2], 0.0f, 1.0f, Parameter::EXPONENTIAL);
+	feedback.Init(hw.knob[Terrarium::KNOB_2], 0.0f, 1.0f, Parameter::LINEAR);
 	mix.Init(hw.knob[Terrarium::KNOB_3], 0.0f, 1.0f, Parameter::EXPONENTIAL);
 	modRate.Init(hw.knob[Terrarium::KNOB_4], .6f, 10.0f, Parameter::EXPONENTIAL);
 	modDepth.Init(hw.knob[Terrarium::KNOB_5], 0.0f, MAX_MOD, Parameter::EXPONENTIAL);
 	Pitch.Init(hw.knob[Terrarium::KNOB_6], -12.0f, 12.0f, Parameter::LINEAR);
 
 	time_tt.Init(hw.AudioSampleRate(), hw.AudioBlockSize());
-	PitchShift.Init();
+	delay_fx.PitchShift.Init();
 
 	lfo.Init(hw.AudioSampleRate());
 	lfo.SetWaveform(lfo.WAVE_SIN);

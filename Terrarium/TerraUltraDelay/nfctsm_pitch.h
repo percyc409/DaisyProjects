@@ -34,7 +34,7 @@ class nfctsm_pitch
             env_flwr.Setup(48000, 50, 100);
         }
 
-        float Process(float &in) {
+        float Process(float in) {
 
             // Write to Buffer
             audio_buffer[wr_ptr] = in;
