@@ -1,15 +1,16 @@
 // Tracks the peaks in the signal stream using the attack and release parameters
+// Edited because I cant work out how to pass the AudioHandle::InputBuffer type to the process function
 
 template <typename Value=float>
-class EnvelopeFollower
+class MonoEnvelopeFollower
 {
 public:
-  EnvelopeFollower()
+  MonoEnvelopeFollower()
   {
     m_env=0;
   }
 
-  Value Value() 
+  double Out() 
   {
     return m_env;
   }
@@ -24,7 +25,7 @@ public:
   {
       Value cur = src;
 
-      double e = m_env[0];
+      double e = m_env;
 
       double v = std::abs(cur);
       if (v > e)
@@ -32,7 +33,7 @@ public:
       else
         e = m_r * (e - v) + v;
 
-      m_env[0]=e;
+      m_env=e;
   }
 
   double m_env;
