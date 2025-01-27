@@ -5,7 +5,7 @@
 #include <stdlib.h>
 
 #define MAX_SIZE 24000  // Half a second in samples
-#define MIN_SIZE 4800   // 100ms in samples
+#define MIN_SIZE 2400   // 100ms in samples
 
 using namespace daisy;
 using namespace daisysp;
@@ -15,17 +15,24 @@ DaisyPetal hw;
 dsy_gpio led1;
 dsy_gpio led2;
 
-SmoothRandomGenerator rng1, rng2;
 MonoEnvelopeFollower<float> env_flwr;
+
+Parameter loopLength;
+Parameter threshold;
+Parameter randFreq;
 
 bool bypass = true;
 
 float DSY_SDRAM_BSS buf[MAX_SIZE];
+
+bool ThresholdMode;
+bool Glitch_Stops;
+bool Mute_Dry  = false; //TBD add
+
 bool recording = false;
 bool waiting = true;
-bool mute_dry  = false; //TBD add
-bool detect=false;
-bool ThresholdMode;
+bool glitchOn = false;
+
 int slice_len;
 int wr_ptr, rd_ptr, wait_cnt;
 
@@ -42,38 +49,63 @@ void ProcessControls() {
 
 	//Switches
 	ThresholdMode = (hw.switches[Terrarium::SWITCH_1].Pressed()) ? true : false;
+	Mute_Dry      = (hw.switches[Terrarium::SWITCH_2].Pressed()) ? true : false;
+	Glitch_Stops  = (hw.switches[Terrarium::SWITCH_3].Pressed()) ? true : false;
 	
 	dsy_gpio_write(&led1, !bypass);
 	dsy_gpio_write(&led2, recording);
 
 }
 
-void randomise() {
 
+int getLoopLength() {
+
+	int len;
+
+	if (loopLength.Process() < MIN_SIZE) { // When Knob is all the way to the left, LoopLength is randomised
+		float rng_out = (float)rand()/RAND_MAX; //Range of 0-1
+		len = MIN_SIZE + rng_out*(MAX_SIZE - MIN_SIZE);
+	} else {
+		len = loopLength.Process();
+	}
+
+	return len;
+}
+
+void randomise() { //Randomly Triggers Samplingtask 
+	
 	if (waiting) {
 		wait_cnt++;
 
-		if(wait_cnt > slice_len * 2) {
+		if(wait_cnt > slice_len) {
 			waiting = false;
 		}
 
-	} else if (rng1.Process() > 0.999f) {
+	} else {
+		float rng_out = (float)rand()/RAND_MAX; //Range of 0-1
+		float rand_f = (Glitch_Stops) ? 2.0f*randFreq.Process() : randFreq.Process();
 
-		recording = true;
-
-		float rng_out = (rng2.Process()+1)/2.0f;  //Range of 0-1
-		slice_len = MIN_SIZE + rng_out*(MAX_SIZE - MIN_SIZE); 
+		if (rng_out > 1.0f - rand_f) {
+			glitchOn = (Glitch_Stops) ? !glitchOn : true; //Randomly Stops the glitch
+			recording = true;
+			slice_len = getLoopLength(); 
+		}
 	}
 
 }
 
-void thresholdCheck() {
+void thresholdCheck() { //Triggers Sampling When envelop follower detects a loud note
 
-	if (env_flwr.Out() > 0.1) {
+	if (waiting) {
+		wait_cnt++;
+
+		if(wait_cnt > slice_len) {
+			waiting = false;
+		}
+
+	} else if (env_flwr.Out() > threshold.Process()) {
 		recording = true;
-
-		float rng_out = (rng2.Process()+1)/2.0f;
-		slice_len = MIN_SIZE + rng_out*(MAX_SIZE - MIN_SIZE);
+		slice_len = getLoopLength();
 	}
 	
 }
@@ -126,10 +158,16 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 					randomise();
 				}				
 
-				if (mute_dry) {
+				if (Mute_Dry) {
 					out[0][i] = loop_out;
 				} else {
-					out[0][i] = in[0][i] + loop_out;
+
+					if(glitchOn) {
+						out[0][i] = in[0][i] + loop_out;
+					} else {
+						out[0][i] = in[0][i];
+					}
+					
 				}
 
 			}		
@@ -143,21 +181,19 @@ int main(void)
 	hw.SetAudioBlockSize(4); // number of samples handled per callback
 	hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
 
-	//Init Random Number Generator
-	rng1.Init(hw.AudioSampleRate());
-	rng1.SetFreq(hw.AudioSampleRate()*0.9732f);
-
-	rng2.Init(hw.AudioSampleRate());
-	rng2.SetFreq(hw.AudioSampleRate()*0.9655f);
-
 	//Init Envelope Follower
 	env_flwr.Setup(48000, 10, 100);
+
+	//Init Parameters
+	loopLength.Init(hw.knob[Terrarium::KNOB_1], MIN_SIZE-100, MAX_SIZE, Parameter::LINEAR);
+	threshold.Init(hw.knob[Terrarium::KNOB_2], 0.05f , 0.15f, Parameter::LINEAR);
+	randFreq.Init(hw.knob[Terrarium::KNOB_3], 0.00001f , 0.00005f, Parameter::LINEAR);
 
 	//Init Buffer
 	for (int i = 0; i < MAX_SIZE; i++) {
 		buf[i] = 0.0f;
 	}
-	
+	slice_len = MIN_SIZE;
 
 	hw.StartAdc();
 	hw.StartAudio(AudioCallback);
