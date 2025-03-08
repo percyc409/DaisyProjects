@@ -84,8 +84,9 @@ int main(void)
 	while(1) {
 
 		if (print_times) {
+			hw.seed.PrintLine("* * * * * * * * * * * * * * * * * * * * * * * *");
 			hw.seed.PrintLine("Audio Callback run time without FFT proc: %d Cycles", std_run_time);
-			hw.seed.PrintLine("Audio Callback run time with FFT proc: %d Cycles\n", fft_run_time);
+			hw.seed.PrintLine("Audio Callback run time with FFT proc: %d Cycles", fft_run_time);
 			print_times = false;
 		}
 		
