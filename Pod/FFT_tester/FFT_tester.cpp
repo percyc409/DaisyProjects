@@ -63,7 +63,7 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 int main(void)
 {
 	hw.Init();
-	hw.SetAudioBlockSize(4); // number of samples handled per callback
+	hw.SetAudioBlockSize(48); // number of samples handled per callback
 	hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
 	hw.StartAdc();
 
@@ -85,7 +85,7 @@ int main(void)
 
 		if (print_times) {
 			hw.seed.PrintLine("Audio Callback run time without FFT proc: %d Cycles", std_run_time);
-			hw.seed.PrintLine("Audio Callback run time with FFT proc: %d Cycles", fft_run_time);
+			hw.seed.PrintLine("Audio Callback run time with FFT proc: %d Cycles\n", fft_run_time);
 			print_times = false;
 		}
 		
