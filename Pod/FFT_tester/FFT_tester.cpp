@@ -8,7 +8,7 @@ using namespace daisysp;
 
 DaisyPod hw;
 
-#define WINDOW_SIZE 1024
+#define WINDOW_SIZE 512
 #define LAPS 4
 
 bool bypass = true;
@@ -48,6 +48,7 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 		}
 		else {	
 			FFT.Process(in[0][i], out[0][i]);
+			out[1][i] = out[0][i];
 		}
 	}
 
@@ -68,7 +69,7 @@ int main(void)
 	hw.StartAdc();
 
 	// Enable Logging, and set up the USB connection.
- 	hw.seed.StartLog(true);
+ 	hw.seed.StartLog();
 
 	// setup measurement
 	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
