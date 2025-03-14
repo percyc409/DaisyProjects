@@ -2,8 +2,8 @@
 #include "daisysp.h"
 #include "core_cm7.h"
 #include "arm_math.h"
+#include "stmlib/atan.h"
 
-#define PI               3.1415926535897932384626433832795f
 #define PI_2             1.5707963267948966192313f
 
 using namespace daisy;
@@ -12,11 +12,14 @@ using namespace daisysp;
 DaisyPod hw;
 bool test, print, overrun_chk, use_knobs;
 
-uint32_t sqrt_time;
+uint32_t mag_time;
+uint32_t cmsis_mag_time;
+uint32_t stm_mag_time;
 uint32_t atan2_time;
 uint32_t approx_atan2_time1;
 uint32_t approx_atan2_time2;
-float a, b, x, y, e, f, g;
+uint32_t approx_atan2_time3, chk;
+float a, b, x, y, e, f, g, h, i;
 
 Parameter x_k, y_k;
 
@@ -89,15 +92,6 @@ float atan2_approx(float y, float x){
 
 void MathsCheck() {
 
-	// - - - - - - - - SQRT - - - - - - - - 
-	a = fabsf(randomFloat())*5.0f;
-	//Measure - start
-	DWT->CYCCNT = 0;
-	b = sqrt(a);
-	//Measure - end
-	sqrt_time = DWT->CYCCNT;
-
-	// - - - - - - - - ATAN2 - - - - - - - - 
 	if (use_knobs) {
 		x = x_k.Process();
 		y = y_k.Process();
@@ -105,6 +99,29 @@ void MathsCheck() {
 		x = randomFloat();
 		y = randomFloat();
 	}
+
+	float mag_in[2];
+	mag_in[0] = x;
+	mag_in[1]= y;
+
+	// - - - - - - - - MAG - - - - - - - - 
+	//Measure - start
+	DWT->CYCCNT = 0;
+	a = sqrt(x * x + y * y);
+	//Measure - end
+	mag_time = DWT->CYCCNT;
+
+	DWT->CYCCNT = 0;
+	arm_cmplx_mag_f32(mag_in, &b, 1);
+	//Measure - end
+	cmsis_mag_time = DWT->CYCCNT;
+	//Measure - start
+	DWT->CYCCNT = 0;
+	i = stmlib::fast_rsqrt_accurate(x * x + y * y);
+	//Measure - end
+	stm_mag_time = DWT->CYCCNT;
+
+	// - - - - - - - - ATAN2 - - - - - - - - 
 	//Measure - start
 	DWT->CYCCNT = 0;
 	e = atan2f(y,x);
@@ -122,6 +139,14 @@ void MathsCheck() {
 	g = atan2_approx(y,x);
 	//Measure - end
 	approx_atan2_time2 = DWT->CYCCNT;
+
+	//Measure - start
+	DWT->CYCCNT = 0;
+	h = stmlib::fast_atan2(y, x);
+	//chk = DWT->CYCCNT;
+	h = h/10000.0f;
+	//Measure - end
+	approx_atan2_time3 = DWT->CYCCNT;
 
 	if (test == false) {
 		overrun_chk = true;
@@ -166,16 +191,17 @@ void printResults(){
 	} else {
 	
 		hw.seed.PrintLine("* * * * * * * * * * * * * * * * * * * * * * * *");
-		hw.seed.PrintLine("b = Sqrt(a)");
-		hw.seed.PrintLine("a = %f", a);
-		hw.seed.PrintLine("b = %f" , b);
-		hw.seed.PrintLine("Sqrt Run time: %d Cycles", sqrt_time);
+		hw.seed.PrintLine("Magnitude(y,x) \ty = %f, \tx = %f", y, x);
+		hw.seed.PrintLine("C++ Standard: \tOutput = %f \tRuntime = %d", a, mag_time);
+		hw.seed.PrintLine("CMSIS Mag: \tOutput = %f \tRuntime = %d", b, cmsis_mag_time);
+		hw.seed.PrintLine("STM lib Mag: \tOutput = %f \tRuntime = %d", i, stm_mag_time);
 
 		hw.seed.PrintLine("* * * * * * * * * * * * * * * * * * * * * * * *");
 		hw.seed.PrintLine("ArcTan2(y,x) \ty = %f, \tx = %f", y, x);
 		hw.seed.PrintLine("C++ atan2f: \tOutput = %f, \tRuntime = %d" , e, atan2_time);
 		hw.seed.PrintLine("1st approx: \tOutput = %f, \tRuntime = %d" , f, approx_atan2_time1);
 		hw.seed.PrintLine("2nd approx: \tOutput = %f, \tRuntime = %d" , g, approx_atan2_time2);
+		hw.seed.PrintLine("STM lib: \tOutput = %f, \tRuntime = %d, %d" , h, chk, approx_atan2_time3);
 
 		hw.seed.PrintLine("* * * * * * * * * * * * * * * * * * * * * * * *");
 	}
@@ -203,6 +229,11 @@ int main(void)
 
 	print = false;
 	use_knobs = false;
+
+ 	approx_atan2_time1 = 0xffff;
+    approx_atan2_time2 = 0xffff;
+ 	approx_atan2_time3 = 0xffff;
+	chk = 0xffff;
 
 	hw.StartAudio(AudioCallback);
 	while(1) {
