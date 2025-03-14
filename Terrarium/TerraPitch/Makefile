@@ -1,10 +1,11 @@
 # Project Name
-TARGET = Bass_CompressorDrive
-
-USE_DAISYSP_LGPL=1
+TARGET = TerraPitch
 
 # Sources
-CPP_SOURCES = Bass_CompressorDrive.cpp highshelf.cpp
+CPP_SOURCES = TerraPitch.cpp
+
+#Utils
+C_INCLUDES = -I ../../Utils/
 
 # Library Locations
 LIBDAISY_DIR = ../../../DaisyExamples/libDaisy/

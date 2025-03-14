@@ -114,7 +114,7 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 
             hi_path = Pre_emphasis.Process(hi_path);
             hi_path = overdrive.Process(hi_path) * driveLevel.Value();
-			hi_path= Post_filt.Process(hi_path);
+			hi_path = Post_filt.Process(hi_path);
         }
 
 		if(bypassComp) {
@@ -149,10 +149,10 @@ void Init(float samplerate)
 	Pre_emphasis.SetGain(36.0F);
 	Post_filt.SetGain(-36.0F);
 
-    threshold.Init(hw.knob[Terrarium::KNOB_1], -50.0f, 0.0f, Parameter::LINEAR);
-    ratio.Init(hw.knob[Terrarium::KNOB_2], 1.0f, 40.0f, Parameter::EXPONENTIAL);
-    makeup.Init(hw.knob[Terrarium::KNOB_3], 1.0f, 20.0f, Parameter::LINEAR);
-    attack.Init(hw.knob[Terrarium::KNOB_4], 0.01f, 0.4f, Parameter::EXPONENTIAL);
+    threshold.Init(hw.knob[Terrarium::KNOB_1], -40.0f, 0.0f, Parameter::LINEAR);
+    ratio.Init(hw.knob[Terrarium::KNOB_2], 1.0f, 20.0f, Parameter::EXPONENTIAL);
+    makeup.Init(hw.knob[Terrarium::KNOB_3], 1.0f, 16.0f, Parameter::LINEAR);
+    attack.Init(hw.knob[Terrarium::KNOB_4], 0.005f, 0.05f, Parameter::EXPONENTIAL);
 
     driveLevel.Init(hw.knob[Terrarium::KNOB_5], 0.00f, 1.0f, Parameter::EXPONENTIAL);
     drive.Init(hw.knob[Terrarium::KNOB_6], 0.0f, 0.8f, Parameter::LINEAR);
