@@ -7,11 +7,15 @@ CPP_SOURCES = MathsTest.cpp
 LDFLAGS += -u _printf_float
 
 C_SOURCES = \
-$(LIBDAISY_DIR)/Drivers/CMSIS/DSP/Source/ComplexMathFunctions/arm_cmplx_mag_f32.c
+$(LIBDAISY_DIR)/Drivers/CMSIS/DSP/Source/ComplexMathFunctions/arm_cmplx_mag_f32.c \
+$(LIBDAISY_DIR)/Drivers/CMSIS/DSP/Source/FastMathFunctions/arm_sin_f32.c \
+$(LIBDAISY_DIR)/Drivers/CMSIS/DSP/Source/FastMathFunctions/arm_cos_f32.c \
+$(LIBDAISY_DIR)/Drivers/CMSIS/DSP/Source/CommonTables/arm_common_tables.c
 
 C_INCLUDES += \
 -I. \
--Istmlib
+-Istmlib \
+-I../../../ChowDSP/include/math_approx
 
 # Library Locations
 LIBDAISY_DIR = ../../../DaisyExamples/libDaisy/

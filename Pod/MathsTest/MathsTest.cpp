@@ -3,6 +3,7 @@
 #include "core_cm7.h"
 #include "arm_math.h"
 #include "stmlib/atan.h"
+#include "../../../ChowDSP/include/math_approx/src/trig_approx.hpp"
 
 #define PI_2             1.5707963267948966192313f
 
@@ -12,14 +13,18 @@ using namespace daisysp;
 DaisyPod hw;
 bool test, print, overrun_chk, use_knobs;
 
+
+
 uint32_t mag_time;
 uint32_t cmsis_mag_time;
 uint32_t stm_mag_time;
 uint32_t atan2_time;
 uint32_t approx_atan2_time1;
 uint32_t approx_atan2_time2;
-uint32_t approx_atan2_time3, chk;
-float a, b, x, y, e, f, g, h, i;
+uint32_t approx_atan2_time3;
+
+uint32_t cos_time, sin_time, cos_time1, sin_time1, cos_time2, sin_time2;
+float a, b, x, y, e, f, g, h, i, j, k, l, m, n, o;
 
 Parameter x_k, y_k;
 
@@ -143,10 +148,45 @@ void MathsCheck() {
 	//Measure - start
 	DWT->CYCCNT = 0;
 	h = stmlib::fast_atan2(y, x);
-	//chk = DWT->CYCCNT;
 	h = h/10000.0f;
 	//Measure - end
 	approx_atan2_time3 = DWT->CYCCNT;
+
+	//Measure - start
+	DWT->CYCCNT = 0;
+	j = cosf(e);
+	//Measure - end
+	cos_time = DWT->CYCCNT;
+
+	//Measure - start
+	DWT->CYCCNT = 0;
+	l = arm_cos_f32(e);
+	//Measure - end
+	cos_time1 = DWT->CYCCNT;
+
+	//Measure - start
+	DWT->CYCCNT = 0;
+	n = math_approx::cos_mpi_pi<5,float>(e);
+	//Measure - end
+	cos_time2 = DWT->CYCCNT;
+	
+	//Measure - start
+	DWT->CYCCNT = 0;
+	k = sinf(e);
+	//Measure - end
+	sin_time = DWT->CYCCNT;
+
+	//Measure - start
+	DWT->CYCCNT = 0;
+	m = arm_sin_f32(e);
+	//Measure - end
+	sin_time1 = DWT->CYCCNT;
+
+	//Measure - start
+	DWT->CYCCNT = 0;
+	o = math_approx::sin_mpi_pi<5,float>(e);
+	//Measure - end
+	sin_time2 = DWT->CYCCNT;
 
 	if (test == false) {
 		overrun_chk = true;
@@ -201,8 +241,17 @@ void printResults(){
 		hw.seed.PrintLine("C++ atan2f: \tOutput = %f, \tRuntime = %d" , e, atan2_time);
 		hw.seed.PrintLine("1st approx: \tOutput = %f, \tRuntime = %d" , f, approx_atan2_time1);
 		hw.seed.PrintLine("2nd approx: \tOutput = %f, \tRuntime = %d" , g, approx_atan2_time2);
-		hw.seed.PrintLine("STM lib: \tOutput = %f, \tRuntime = %d, %d" , h, chk, approx_atan2_time3);
+		hw.seed.PrintLine("STM lib: \tOutput = %f, \tRuntime = %d, %d" , h, approx_atan2_time3);
 
+		hw.seed.PrintLine("* * * * * * * * * * * * * * * * * * * * * * * *");
+		hw.seed.PrintLine("Cos(e) \te = %f", e);
+		hw.seed.PrintLine("C++ Standard: \tOutput = %f \tRuntime = %d", j, cos_time);
+		hw.seed.PrintLine("Cmsis: \t\tOutput = %f \tRuntime = %d", l, cos_time1);
+		hw.seed.PrintLine("Chow: \t\tOutput = %f \tRuntime = %d", n, cos_time2);
+		hw.seed.PrintLine("Sin(e) \te = %f", e);
+		hw.seed.PrintLine("C++ Standard: \tOutput = %f \tRuntime = %d", k, sin_time);
+		hw.seed.PrintLine("Cmsis: \t\tOutput = %f \tRuntime = %d", m, sin_time1);
+		hw.seed.PrintLine("Chow: \t\tOutput = %f \tRuntime = %d", o, sin_time2);
 		hw.seed.PrintLine("* * * * * * * * * * * * * * * * * * * * * * * *");
 	}
 }
@@ -233,7 +282,6 @@ int main(void)
  	approx_atan2_time1 = 0xffff;
     approx_atan2_time2 = 0xffff;
  	approx_atan2_time3 = 0xffff;
-	chk = 0xffff;
 
 	hw.StartAudio(AudioCallback);
 	while(1) {
