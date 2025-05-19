@@ -47,7 +47,7 @@ public:
 
             bin_deviation = phase_diff * phase2dev;
 
-            analysis_freq[i] = (float)i + bin_deviation;
+            analysis_freq[i] = (float)i - bin_deviation;
             analysis_magnitude[i] = magnitude;
             last_phase_in[i] = phase;
 

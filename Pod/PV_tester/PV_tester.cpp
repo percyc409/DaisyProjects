@@ -4,13 +4,15 @@
 #include "STFT_Base_test.h"
 #include "PhaseVocoder_Base.h"
 
+
+
 using namespace daisy;
 using namespace daisysp;
 
 DaisyPod hw;
 
 #define WINDOW_SIZE 2048
-#define LAPS 8
+#define LAPS 4
 
 bool bypass = true;
 bool print_times = false;
