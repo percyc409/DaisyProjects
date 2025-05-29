@@ -12,7 +12,7 @@ using namespace daisysp;
 DaisyPod hw;
 
 #define WINDOW_SIZE 2048
-#define LAPS 4
+#define LAPS 8
 
 bool bypass = true;
 bool print_times = false;

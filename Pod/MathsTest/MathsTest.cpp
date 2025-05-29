@@ -97,6 +97,8 @@ float atan2_approx(float y, float x){
 
 void MathsCheck() {
 
+	int temp;
+
 	if (use_knobs) {
 		x = x_k.Process();
 		y = y_k.Process();
@@ -116,77 +118,77 @@ void MathsCheck() {
 	//Measure - end
 	mag_time = DWT->CYCCNT;
 
-	DWT->CYCCNT = 0;
+	temp = DWT->CYCCNT;
 	arm_cmplx_mag_f32(mag_in, &b, 1);
 	//Measure - end
-	cmsis_mag_time = DWT->CYCCNT;
+	cmsis_mag_time = DWT->CYCCNT - temp;
 	//Measure - start
-	DWT->CYCCNT = 0;
+	temp = DWT->CYCCNT;
 	i = stmlib::fast_rsqrt_accurate(x * x + y * y);
 	//Measure - end
-	stm_mag_time = DWT->CYCCNT;
+	stm_mag_time = DWT->CYCCNT - temp;
 
 	// - - - - - - - - ATAN2 - - - - - - - - 
 	//Measure - start
-	DWT->CYCCNT = 0;
+	temp = DWT->CYCCNT;
 	e = atan2f(y,x);
 	//Measure - end
-	atan2_time = DWT->CYCCNT;
+	atan2_time = DWT->CYCCNT - temp;
 
 	//Measure - start
-	DWT->CYCCNT = 0;
+	temp = DWT->CYCCNT;
 	f = ApproxAtan2(y,x);
 	//Measure - end
-	approx_atan2_time1 = DWT->CYCCNT;
+	approx_atan2_time1 = DWT->CYCCNT - temp;
 	
 	//Measure - start
-	DWT->CYCCNT = 0;
+	temp = DWT->CYCCNT;
 	g = atan2_approx(y,x);
 	//Measure - end
-	approx_atan2_time2 = DWT->CYCCNT;
+	approx_atan2_time2 = DWT->CYCCNT - temp;
 
 	//Measure - start
-	DWT->CYCCNT = 0;
+	temp = DWT->CYCCNT;
 	h = stmlib::fast_atan2(y, x);
 	h = h/10000.0f;
 	//Measure - end
-	approx_atan2_time3 = DWT->CYCCNT;
+	approx_atan2_time3 = DWT->CYCCNT - temp;
 
 	//Measure - start
-	DWT->CYCCNT = 0;
+	temp = DWT->CYCCNT;
 	j = cosf(e);
 	//Measure - end
-	cos_time = DWT->CYCCNT;
+	cos_time = DWT->CYCCNT - temp;
 
 	//Measure - start
-	DWT->CYCCNT = 0;
+	temp = DWT->CYCCNT;
 	l = arm_cos_f32(e);
 	//Measure - end
-	cos_time1 = DWT->CYCCNT;
+	cos_time1 = DWT->CYCCNT - temp;
 
 	//Measure - start
-	DWT->CYCCNT = 0;
+	temp = DWT->CYCCNT;
 	n = math_approx::cos_mpi_pi<5,float>(e);
 	//Measure - end
-	cos_time2 = DWT->CYCCNT;
+	cos_time2 = DWT->CYCCNT - temp;
 	
 	//Measure - start
-	DWT->CYCCNT = 0;
+	temp = DWT->CYCCNT;
 	k = sinf(e);
 	//Measure - end
-	sin_time = DWT->CYCCNT;
+	sin_time = DWT->CYCCNT - temp;
 
 	//Measure - start
-	DWT->CYCCNT = 0;
+	temp = DWT->CYCCNT;
 	m = arm_sin_f32(e);
 	//Measure - end
-	sin_time1 = DWT->CYCCNT;
+	sin_time1 = DWT->CYCCNT - temp;
 
 	//Measure - start
-	DWT->CYCCNT = 0;
+	temp = DWT->CYCCNT;
 	o = math_approx::sin_mpi_pi<5,float>(e);
 	//Measure - end
-	sin_time2 = DWT->CYCCNT;
+	sin_time2 = DWT->CYCCNT - temp;
 
 	if (test == false) {
 		overrun_chk = true;
@@ -241,7 +243,7 @@ void printResults(){
 		hw.seed.PrintLine("C++ atan2f: \tOutput = %f, \tRuntime = %d" , e, atan2_time);
 		hw.seed.PrintLine("1st approx: \tOutput = %f, \tRuntime = %d" , f, approx_atan2_time1);
 		hw.seed.PrintLine("2nd approx: \tOutput = %f, \tRuntime = %d" , g, approx_atan2_time2);
-		hw.seed.PrintLine("STM lib: \tOutput = %f, \tRuntime = %d, %d" , h, approx_atan2_time3);
+		hw.seed.PrintLine("STM lib: \tOutput = %f, \tRuntime = %d" , h, approx_atan2_time3);
 
 		hw.seed.PrintLine("* * * * * * * * * * * * * * * * * * * * * * * *");
 		hw.seed.PrintLine("Cos(e) \te = %f", e);
@@ -278,10 +280,6 @@ int main(void)
 
 	print = false;
 	use_knobs = false;
-
- 	approx_atan2_time1 = 0xffff;
-    approx_atan2_time2 = 0xffff;
- 	approx_atan2_time3 = 0xffff;
 
 	hw.StartAudio(AudioCallback);
 	while(1) {

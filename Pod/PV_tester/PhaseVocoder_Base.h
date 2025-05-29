@@ -16,7 +16,7 @@ public:
     PhaseVocoder_Base() {
 
         for (size_t n = 0; n < FFT_SIZE/2; n++){
-            bin_centre_frequency[n] = (TWO_PI * n * this->stride) / FFT_SIZE;
+            bin_centre_frequency[n] = (TWO_PI * fmodf((float)n * (float)this->stride / (float)FFT_SIZE, 1.0f));
             last_phase_in[n] = 0.0f;
             last_phase_out[n] = 0.0f;
         }
@@ -40,14 +40,15 @@ public:
         for (size_t i = 0; i < num_bins; i++) {
             
             magnitude = sqrt(this->fftBuff[i + num_bins] * this->fftBuff[i + num_bins] + this->fftBuff[i] * this->fftBuff[i]);
-            phase = stmlib::fast_atan2(this->fftBuff[i + num_bins], this->fftBuff[i]) /10000.0f;
+            //phase = stmlib::fast_atan2(this->fftBuff[i + num_bins], this->fftBuff[i]) /10000.0f;
+            phase = atan2_approx(this->fftBuff[i], this->fftBuff[i + num_bins]);
 
             phase_diff = phase - last_phase_in[i];
             phase_diff = wrapPhase(phase_diff - bin_centre_frequency[i]);
 
             bin_deviation = phase_diff * phase2dev;
 
-            analysis_freq[i] = (float)i - bin_deviation;
+            analysis_freq[i] = (float)i + bin_deviation;
             analysis_magnitude[i] = magnitude;
             last_phase_in[i] = phase;
 
@@ -55,13 +56,14 @@ public:
 
         //Process Pitch Shift
         for (size_t n = 0; n < num_bins; n++) {
-            synthesis_freq[n] = synthesis_magnitude[n] = 0.0f;
+            synthesis_freq[n] = 0.0f;
+            synthesis_magnitude[n] = 0.0f;
         }
 
         for (size_t n = 0; n < num_bins; n++) {
 
-            newbin = static_cast<size_t>(floorf(n * pitch_shift + 0.5f));
-            //size_t newbin = static_cast<size_t>(floorf(analysis_freq[n] * pitch_shift + 0.5f);
+            //newbin = static_cast<size_t>(floorf(n * pitch_shift + 0.5f));
+            newbin = static_cast<size_t>(floorf(analysis_freq[n] * pitch_shift + 0.5f));
 
             if (newbin < num_bins) {
                 synthesis_magnitude[newbin] += analysis_magnitude[n];
@@ -81,8 +83,8 @@ public:
 
             out_phase = wrapPhase(last_phase_out[i] + phase_diff);
 
-            this->fftBuff[i]            = magnitude * math_approx::cos_mpi_pi<5,float>(out_phase);
-            this->fftBuff[i + num_bins] = magnitude * math_approx::sin_mpi_pi<5,float>(out_phase);
+            this->fftBuff[i + num_bins]            = magnitude * math_approx::cos_mpi_pi<5,float>(out_phase);
+            this->fftBuff[i] = magnitude * math_approx::sin_mpi_pi<5,float>(out_phase);
 
             last_phase_out[i] = out_phase;
         }
