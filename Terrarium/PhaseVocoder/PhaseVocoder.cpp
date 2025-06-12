@@ -1,12 +1,10 @@
 #include "daisy_petal.h"
 #include "daisysp.h"
 #include "terrarium.h"
-#include "shy_fft.h"
 #include "PhaseVocoder_Base.h"
-#include "STFT_Base.h"
 
-#define FFT_SIZE 1024
-#define LAPS 4
+#define FFT_SIZE 2048
+#define LAPS 8
 
 using namespace daisy;
 using namespace daisysp;

@@ -16,13 +16,13 @@ public:
     PhaseVocoder_Base() {
 
         for (size_t n = 0; n < FFT_SIZE/2; n++){
-            bin_centre_frequency[n] = (TWO_PI * fmodf((float)n * (float)this->stride / (float)FFT_SIZE, 1.0f));
+            bin_centre_frequency[n] = -(TWO_PI * fmodf((float)n * (float)this->stride / (float)FFT_SIZE, 1.0f));
             last_phase_in[n] = 0.0f;
             last_phase_out[n] = 0.0f;
         }
 
-        phase2dev = (float)FFT_SIZE / ((float)this->stride * TWO_PI);
-        dev2phase = (TWO_PI * (float)this->stride) / (float)FFT_SIZE;
+        phase2dev = -(float)FFT_SIZE / ((float)this->stride * TWO_PI);
+        dev2phase = -(TWO_PI * (float)this->stride) / (float)FFT_SIZE;
         num_bins = FFT_SIZE/2;
     }
 
@@ -40,8 +40,7 @@ public:
         for (size_t i = 0; i < num_bins; i++) {
             
             magnitude = sqrt(this->fftBuff[i + num_bins] * this->fftBuff[i + num_bins] + this->fftBuff[i] * this->fftBuff[i]);
-            //phase = stmlib::fast_atan2(this->fftBuff[i + num_bins], this->fftBuff[i]) /10000.0f;
-            phase = atan2_approx(this->fftBuff[i], this->fftBuff[i + num_bins]);
+            phase = atan2_approx(this->fftBuff[i + num_bins], this->fftBuff[i]);
 
             phase_diff = phase - last_phase_in[i];
             phase_diff = wrapPhase(phase_diff - bin_centre_frequency[i]);
@@ -83,8 +82,8 @@ public:
 
             out_phase = wrapPhase(last_phase_out[i] + phase_diff);
 
-            this->fftBuff[i + num_bins]            = magnitude * math_approx::cos_mpi_pi<5,float>(out_phase);
-            this->fftBuff[i] = magnitude * math_approx::sin_mpi_pi<5,float>(out_phase);
+            this->fftBuff[i + num_bins] = magnitude * math_approx::sin_mpi_pi<5,float>(out_phase);
+            this->fftBuff[i]            = magnitude * math_approx::cos_mpi_pi<5,float>(out_phase);
 
             last_phase_out[i] = out_phase;
         }
@@ -146,3 +145,15 @@ private:
     size_t num_bins;
 
 };
+
+/*Notes to Self:
+
+Major source of issue in development was the assumption that if a given frequency bin contained info on a harmonic thats 
+true frequency was greater than the bins centre frequency, the phase advance between FFT windows would be GREATER than the expected bins phase advance.
+It is actually the opposite that is true.
+Imagine succesive FFT windows with zero overlap containing a sine perfectly aligned with the start and end of an FFT window. 
+If the sines frequency were to increase, the start point of the successive windows will start to move closer to that of a cosine. In the time domain, this is a positive phase advance.
+In the frequency domain, a sine wave is purely odd so hence has a phase of pi/2. A cosine is purely even so hence has a phase of 0. 
+Therefore the phase in the frequency domain is actually decreasing
+
+*/

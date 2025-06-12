@@ -126,11 +126,11 @@ public:
 protected:
     
     float fftBuff[FFT_SIZE];
+    size_t stride;
 
 private:
     
     ShyFFT<float, FFT_SIZE, RotationPhasor> fft;
-    size_t stride;
     float scalingFactor;
     float window[FFT_SIZE];
 

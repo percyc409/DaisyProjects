@@ -1,8 +1,10 @@
 #pragma once
-#include "shy_fft.h"
-#include "STFT_Base.h"
+#include "../../Utils/STFT_Base.h"
+#include "../../../ChowDSP/include/math_approx/src/trig_approx.hpp"
 
 #define PI 3.1415926535897932384626433832795
+#define PI_2 1.5707963267948966192313f
+#define TWO_PI 6.28318530718f
 
 template <size_t FFT_SIZE, size_t LAPS>
 class PhaseVocoder_Base : public STFT_Base<FFT_SIZE, LAPS>
@@ -12,28 +14,35 @@ public:
     PhaseVocoder_Base() {
 
         for (size_t n = 0; n < FFT_SIZE/2; n++){
-            bin_centre_frequency[n] = 2.0f * PI * n / FFT_SIZE;
+            bin_centre_frequency[n] = -(TWO_PI * fmodf((float)n * (float)this->stride / (float)FFT_SIZE, 1.0f));
             last_phase_in[n] = 0.0f;
             last_phase_out[n] = 0.0f;
         }
-
+        phase2dev = -(float)FFT_SIZE / ((float)this->stride * TWO_PI);
+        dev2phase = -(TWO_PI * (float)this->stride) / (float)FFT_SIZE;
+        num_bins = FFT_SIZE/2;
     }
 
     void frequency_process()
     {
 
-        for (size_t i = 0; i < FFT_SIZE/2; i++) {
+        float magnitude;
+        float phase;
+        float phase_diff;
+        float bin_deviation;
+        float out_phase;
+        size_t newbin;
+
+        //Phase Vocoder Input Processing
+        for (size_t i = 0; i < num_bins; i++) {
             
-            float magnitude = sqrt(this->fftBuff[i + FFT_SIZE/2] * this->fftBuff[i + FFT_SIZE/2] + this->fftBuff[i] * this->fftBuff[i]);
-            float phase = atan2f(this->fftBuff[i + FFT_SIZE/2], this->fftBuff[i]);
+            magnitude = sqrt(this->fftBuff[i + num_bins] * this->fftBuff[i + num_bins] + this->fftBuff[i] * this->fftBuff[i]);
+            phase = atan2_approx(this->fftBuff[i + num_bins], this->fftBuff[i]);
 
-            //float magnitude = sqrt(this->fftBuff[i*2 + 1] * this->fftBuff[i*2 + 1] + this->fftBuff[i*2] * this->fftBuff[i*2]);
-            //float phase = atan2f(this->fftBuff[i*2 + 1], this->fftBuff[i*2]);
+            phase_diff = phase - last_phase_in[i];
+            phase_diff = wrapPhase(phase_diff - bin_centre_frequency[i]);
 
-            float phase_diff = phase - last_phase_in[i];
-            phase_diff = wrapPhase(phase_diff - bin_centre_frequency[i] * this->stride);
-
-            float bin_deviation = phase_diff * (float)FFT_SIZE / (float)this->stride / (2.0f*PI);
+            bin_deviation = phase_diff * phase2dev;
 
             analysis_freq[i] = (float)i + bin_deviation;
             analysis_magnitude[i] = magnitude;
@@ -41,48 +50,41 @@ public:
 
         }
 
-        process_pitch_shift();
-
-
-        for (size_t i = 0; i < FFT_SIZE/2; i++) {
-            
-            float magnitude = synthesis_magnitude[i];
-
-            float bin_deviation = synthesis_freq[i] - i;
-
-            float phase_diff = bin_deviation * 2.0f * PI * (float)this->stride / (float)FFT_SIZE;
-            phase_diff += bin_centre_frequency[i] * this->stride;
-
-            float out_phase = wrapPhase(last_phase_out[i] + phase_diff);
-
-            this->fftBuff[i] = magnitude * cosf(out_phase);
-            this->fftBuff[i + FFT_SIZE/2] = magnitude * sinf(out_phase);
-
-            //this->fftBuff[i*2] = magnitude * cosf(out_phase);
-            //this->fftBuff[i*2 + 1] = magnitude * sinf(out_phase);
-
-
-            last_phase_out[i] = out_phase;
-        }
-    
-    }
-
-    void process_pitch_shift() {
-
-        for (size_t n = 0; n < FFT_SIZE/2; n++) {
-            synthesis_freq[n] = synthesis_magnitude[n] = 0.0f;
+        //Process Pitch Shift
+        for (size_t n = 0; n < num_bins; n++) {
+            synthesis_freq[n] = 0.0f;
+            synthesis_magnitude[n] = 0.0f;
         }
 
-        for (size_t n = 0; n < FFT_SIZE/2; n++) {
+        for (size_t n = 0; n < num_bins; n++) {
 
-            size_t newbin = floorf(n * pitch_shift + 0.5);
+            //newbin = static_cast<size_t>(floorf(n * pitch_shift + 0.5f));
+            newbin = static_cast<size_t>(floorf(analysis_freq[n] * pitch_shift + 0.5f));
 
-            if (newbin < FFT_SIZE/2) {
+            if (newbin < num_bins) {
                 synthesis_magnitude[newbin] += analysis_magnitude[n];
                 synthesis_freq[newbin] = analysis_freq[n] * pitch_shift; 
             }
         }
 
+        //Phase Vocoder Output Processing
+        for (size_t i = 0; i < num_bins; i++) {
+            
+            magnitude = synthesis_magnitude[i];
+
+            bin_deviation = synthesis_freq[i] - (float)i;
+
+            phase_diff = bin_deviation * dev2phase;
+            phase_diff += bin_centre_frequency[i];
+
+            out_phase = wrapPhase(last_phase_out[i] + phase_diff);
+
+            this->fftBuff[i + num_bins] = magnitude * math_approx::sin_mpi_pi<5,float>(out_phase);
+            this->fftBuff[i]            = magnitude * math_approx::cos_mpi_pi<5,float>(out_phase);
+
+            last_phase_out[i] = out_phase;
+        }
+    
     }
 
     //Expects x to be in range -1 to 1 for +/- 1 octave pitch shift range
@@ -102,6 +104,27 @@ private:
             return fmodf(phaseIn - PI, -2.0 * PI) + PI;	
     }
 
+    // Polynomial approximating arctangenet on the range -1,1.
+    // Max error < 0.005 (or 0.29 degrees)
+    float atan_approx(float z)
+    {
+        const float n1 = 0.97239411f;
+        const float n2 = -0.19194795f;
+        return (n1 + n2 * z * z) * z;
+    }
+
+
+    float atan2_approx(float y, float x){
+        float ay = fabs(y), ax = fabs(x);
+        int invert = ay > ax;
+        float z = invert ? ax/ay : ay/ax; // [0,1]
+        float th = atan_approx(z);        // [0,π/4]
+        if(invert) th = PI_2 - th;       // [0,π/2]
+        if(x < 0) th = PI - th;          // [0,π]
+        th = copysign(th, y);              // [-π,π]
+        return th;
+    }
+
     float pitch_shift;
     
     float last_phase_in[FFT_SIZE/2];
@@ -112,5 +135,9 @@ private:
     float analysis_magnitude[FFT_SIZE/2];
     float synthesis_freq[FFT_SIZE/2];
     float synthesis_magnitude[FFT_SIZE/2];
+
+    float phase2dev;
+    float dev2phase;
+    size_t num_bins;
 
 };

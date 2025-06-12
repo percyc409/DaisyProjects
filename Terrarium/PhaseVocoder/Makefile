@@ -4,6 +4,9 @@ TARGET = PhaseVocoder
 # Sources
 CPP_SOURCES = PhaseVocoder.cpp
 
+C_INCLUDES = -I ../../Utils/  \
+-Istmlib/
+
 # Library Locations
 LIBDAISY_DIR = ../../../DaisyExamples/libDaisy/
 DAISYSP_DIR = ../../../DaisyExamples/DaisySP/
