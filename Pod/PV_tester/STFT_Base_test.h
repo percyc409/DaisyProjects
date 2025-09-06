@@ -1,6 +1,5 @@
 #pragma once
-#include "shy_fft.h"
-
+#include "../../Utils/shy_fft.h"
 /*
 FFT_SIZE should be a power of 2
 
@@ -15,14 +14,15 @@ Real FFT functions return those N / 2 complex numbers as an array of N real numb
 The input to Inverse expects the same format. (By comparison, the CMSIS real FFT function packs frequency-domain data like {real[0], imag[0], ..., real[N / 2 - 1], imag[N / 2 - 1]}.)
 */
 
+//STFT Class 
 #define PI 3.1415926535897932384626433832795
 
 template <size_t FFT_SIZE, size_t LAPS>
-class STFT_Base
+class STFT_Base_test
 {
 public:
 
-    STFT_Base()
+    STFT_Base_test()
     {
         fft.Init();
 
@@ -32,7 +32,7 @@ public:
         scalingFactor = 2.0f / (static_cast<float>(FFT_SIZE) * LAPS);
 
         for (size_t n = 0; n < FFT_SIZE; n++) {
-        	window[n] = 0.5f * (1.0f -cosf(2.0f * PI * n / (float)(FFT_SIZE-1)));
+        	window[n] = 0.5f * (1.0f - cosf(2.0f * PI * n / (float)(FFT_SIZE-1)));
         }
 
         for (size_t i = 0; i < LAPS*2; i++) {
@@ -49,6 +49,7 @@ public:
 
     void Process(float input, float& output)
     {
+		fft_ran = false;
         Write(input);
         output = Read();
     }
@@ -74,6 +75,7 @@ public:
 					reading[i] = true;
 					read_index[i] = 0;
 
+					fft_ran = true;
                     fft_proc(i);
 
                 }
@@ -123,6 +125,10 @@ public:
     
     }
 
+	bool fft_ran_check() {
+		return fft_ran;
+	}
+
 protected:
     
     float fftBuff[FFT_SIZE];
@@ -133,6 +139,8 @@ private:
     ShyFFT<float, FFT_SIZE, RotationPhasor> fft;
     float scalingFactor;
     float window[FFT_SIZE];
+
+	bool fft_ran;
 
     float buffer[FFT_SIZE*LAPS*2]; // LAPS*2 buffers of size FFT_SIZE in series => {buffer[1], buffer[2], ...., buffer[LAPS*2]}
 
