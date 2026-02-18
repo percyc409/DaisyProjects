@@ -15,24 +15,43 @@ dsy_gpio led1;
 dsy_gpio led2;
 
 bool bypass = true;
+bool ramping = false;
 
 Parameter pitch;
+Parameter ramp_att;
+Parameter ramp_rel;
 
 PhaseVocoder_Base<FFT_SIZE, LAPS> PitchShift;
+Adsr ramp;
 
 void ProcessControls() {
 	
 	hw.ProcessAllControls();
-
-	//knobs
-
-	PitchShift.set_pitch_shift(pitch.Process());
 
 	//footswitch
     if(hw.switches[Terrarium::FOOTSWITCH_1].RisingEdge())
     {
         bypass = !bypass;
     }
+
+	ramp.SetAttackTime(ramp_att.Process());
+	ramp.SetReleaseTime(ramp_rel.Process());
+
+	if (!bypass) {
+		PitchShift.set_pitch_shift(pitch.Process());
+	} else {
+		float ramp_val;
+
+		ramp_val = ramp.Process(hw.switches[Terrarium::FOOTSWITCH_2].Pressed());
+
+		PitchShift.set_pitch_shift(pitch.Process() * ramp_val);
+	}
+
+	if (ramp.GetCurrentSegment() == 0) {
+		ramping = false;
+	} else {
+		ramping = true;
+	}
 	
 	dsy_gpio_write(&led1, !bypass);
 
@@ -44,7 +63,7 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 
 	for (size_t i = 0; i < size; i++) {
 		
-		if (bypass) {
+		if (bypass && !ramping) {
 			out[0][i] = in[0][i];
 			out[1][i] = in[1][i];
 		}
@@ -58,10 +77,17 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 int main(void)
 {
 	hw.Init();
-	hw.SetAudioBlockSize(4); // number of samples handled per callback
-	hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
+	hw.SetAudioBlockSize(96); // number of samples handled per callback
+	hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_32KHZ);
 
 	pitch.Init(hw.knob[Terrarium::KNOB_1], -1.0f, 1.0f, Parameter::LINEAR);
+	ramp_att.Init(hw.knob[Terrarium::KNOB_2], 0.0001f, 0.5f, Parameter::EXPONENTIAL);
+	ramp_rel.Init(hw.knob[Terrarium::KNOB_3], 0.0001f, 0.5f, Parameter::EXPONENTIAL);
+
+	ramp.Init(hw.AudioSampleRate());
+	ramp.SetDecayTime(0.0f);
+	ramp.SetSustainLevel(1.0f);
+
 	
 
 	hw.StartAdc();
