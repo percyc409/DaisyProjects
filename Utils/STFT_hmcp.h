@@ -1,6 +1,10 @@
 #pragma once
-#include "../../Utils/shy_fft.h"
+#include "shy_fft.h"
 /*
+HIGH Memory STFT Base Class. Derived class can define their own Frequency Processing function
+This STFT Class optimises allocated time for frequency processing at the expense of memory
+A very large buffer is used that allows for the window function to be applied as samples are read in during the process() function
+
 FFT_SIZE should be a power of 2
 
 LAPS should be a factor of FFT_SIZE
@@ -18,15 +22,16 @@ The input to Inverse expects the same format. (By comparison, the CMSIS real FFT
 #define PI 3.1415926535897932384626433832795
 
 template <size_t FFT_SIZE, size_t LAPS>
-class STFT_Base_test
+class STFT_hmcp
 {
 public:
 
-    STFT_Base_test()
+
+    STFT_hmcp()
     {
         fft.Init();
 
-        stride = FFT_SIZE/LAPS;
+        buffer_ready = false;
 
         // Calculate the scaling factor to normalize read samples (2 / N*LAPS)
         scalingFactor = 2.0f / (static_cast<float>(FFT_SIZE) * LAPS);
@@ -35,21 +40,35 @@ public:
         	window[n] = 0.5f * (1.0f - cosf(2.0f * PI * n / (float)(FFT_SIZE-1)));
         }
 
-        for (size_t i = 0; i < LAPS*2; i++) {
+        for (size_t i = 0; i <= LAPS*2; i++) {
             
-            write_index[i] = i*-stride; // Initialising the buffers with negative indexs ensures we dont start writing to them until i*-stride samples have passed
+            write_index[i] = i*-STRIDE; // Initialising the buffers with negative indexs ensures we dont start writing to them until i*-STRIDE samples have passed
             read_index[i]  = 0;
+            processing = -1;
             
-            writing[i] = true; // Initially, all buffers are writing buffers. Eventually, there will be LAPS write buffers and LAPS read buffers
+            writing[i] = true; // Initially, all buffers are writing buffers. Eventually, there will be LAPS write buffers and LAPS read buffers and one processing buffer
             reading[i] = false;
         }
         
     }
 
+    void Reset() {
+
+        buffer_ready = false;
+
+        for (size_t i = 0; i <= LAPS*2; i++) {
+            
+            write_index[i] = i*-STRIDE; // Initialising the buffers with negative indexs ensures we dont start writing to them until i*-STRIDE samples have passed
+            read_index[i]  = 0;
+            processing = -1;
+            
+            writing[i] = true;
+            reading[i] = false;
+        }
+    }
 
     void Process(float input, float& output)
     {
-		fft_ran = false;
         Write(input);
         output = Read();
     }
@@ -58,7 +77,7 @@ public:
     // Applies windowing and writes to all parallel buffers. Number of parallel write buffers = LAPS 
     void Write(float in) {
 
-        for(size_t i = 0; i <LAPS*2; i++){
+        for(size_t i = 0; i <= LAPS*2; i++){
 
             if(writing[i]) {
 
@@ -72,11 +91,13 @@ public:
                 if(write_index[i] == FFT_SIZE) {
 
                     writing[i] = false;
-					reading[i] = true;
-					read_index[i] = 0;
+                    read_index[i] = 0;
 
-					fft_ran = true;
-                    fft_proc(i);
+                    if (processing != -1) {
+                        reading[processing] = true;
+                    }
+					processing = i;
+                    buffer_ready = true;
 
                 }
             }
@@ -88,7 +109,7 @@ public:
 
         float out = 0.0f;
 
-        for(size_t i = 0; i <LAPS*2; i++){
+        for(size_t i = 0; i <=LAPS*2; i++){
 
             if(reading[i]) {
 
@@ -110,9 +131,9 @@ public:
     }
 
     // Iniates FFT, calls frequency processing function, initiates IFFT
-    void fft_proc(size_t buffer_index)
+    void fft_proc()
     {
-        size_t start = buffer_index*FFT_SIZE;
+        size_t start = processing*FFT_SIZE;
 
         fft.Direct((buffer+start), fftBuff);
         frequency_process();
@@ -125,14 +146,17 @@ public:
     
     }
 
-	bool fft_ran_check() {
-		return fft_ran;
+	void check_buffer_ready() {
+		if (buffer_ready) {
+            fft_proc();
+            buffer_ready = false;
+        }
 	}
 
 protected:
     
+    static constexpr size_t STRIDE = FFT_SIZE/LAPS;
     float fftBuff[FFT_SIZE];
-    size_t stride;
 
 private:
     
@@ -140,13 +164,13 @@ private:
     float scalingFactor;
     float window[FFT_SIZE];
 
-	bool fft_ran;
+    float buffer[FFT_SIZE*(LAPS*2 + 1)]; // LAPS*2 buffers of size FFT_SIZE in series => {buffer[1], buffer[2], ...., buffer[LAPS*2]}
 
-    float buffer[FFT_SIZE*LAPS*2]; // LAPS*2 buffers of size FFT_SIZE in series => {buffer[1], buffer[2], ...., buffer[LAPS*2]}
-
-    int write_index[LAPS*2];
-    int read_index[LAPS*2];
-    bool writing[LAPS*2];
-    bool reading[LAPS*2];
+    int write_index[LAPS*2 + 1];
+    int read_index[LAPS*2 + 1];
+    bool writing[LAPS*2 + 1];
+    bool reading[LAPS*2 + 1];
+    int processing;
+    volatile bool buffer_ready;
 
 };
