@@ -1,7 +1,6 @@
 #include "daisy_pod.h"
 #include "daisysp.h"
 #include "core_cm7.h"
-#include "STFT_Base_test.h"
 #include "PhaseVocoder_Base.h"
 
 
@@ -11,13 +10,13 @@ using namespace daisysp;
 
 DaisyPod hw;
 
-#define WINDOW_SIZE 2048
-#define LAPS 8
+#define WINDOW_SIZE 1024
+#define LAPS 4
 
 bool bypass = true;
-bool print_times = false;
-uint32_t fft_run_time; //Cycles taken by audio callback when FFT is conducted
-uint32_t std_run_time; //Cycles taken by audio callback when FFT is not conducted
+//bool print_times = false;
+//uint32_t fft_run_time; //Cycles taken by audio callback when FFT is conducted
+//uint32_t std_run_time; //Cycles taken by audio callback when FFT is not conducted
 
 PhaseVocoder_Base<WINDOW_SIZE, LAPS> FFT;
 Parameter pitch;
@@ -25,11 +24,11 @@ Parameter pitch;
 void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t size)
 {
 	//Measure - start
-	DWT->CYCCNT = 0;
+	//DWT->CYCCNT = 0;
 
 	//Controls
 	hw.ProcessAllControls();
-	print_times = (hw.button2.RisingEdge()) ? true : print_times;
+	//print_times = (hw.button2.RisingEdge()) ? true : print_times;
 
 	FFT.set_pitch_shift(pitch.Process());
 
@@ -39,7 +38,7 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 
 		if (bypass) {
 			hw.led1.Set(0, 0, 0); // off
-
+			FFT.Reset();
 		} else {
 			hw.led1.Set(0, 0, 1); // blue
 		}
@@ -61,11 +60,11 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 	}
 
 	//Measure - end
-	if (FFT.fft_ran_check()) {
+	/*if (FFT.fft_ran_check()) {
 		fft_run_time = DWT->CYCCNT;
 	} else {
 		std_run_time = DWT->CYCCNT;
-	}
+	}*/
 	
 }
 
@@ -82,26 +81,28 @@ int main(void)
 	pitch.Init(hw.knob1, -1.0f, 1.0f, Parameter::LINEAR);
 
 	// setup measurement
-	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+	/*CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
 	DWT->LAR = 0xC5ACCE55;
 	DWT->CYCCNT = 0;
 	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 
 	fft_run_time = 0;
-	std_run_time = 0;
+	std_run_time = 0;*/
 
 	hw.StartAudio(AudioCallback);
 
 	while(1) {
 
-		if (print_times) {
+		FFT.check_buffer_ready();
+
+		/*if (print_times) {
 			hw.seed.PrintLine("* * * * * * * * * * * * * * * * * * * * * * * *");
 			hw.seed.PrintLine("Audio Callback run time without FFT proc: %d Cycles", std_run_time);
 			hw.seed.PrintLine("Audio Callback run time with FFT proc: %d Cycles", fft_run_time);
 			print_times = false;
 		}
 		
-		System::Delay(1000);
+		System::Delay(1000);*/
 
 	}
 }
