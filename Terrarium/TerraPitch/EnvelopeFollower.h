@@ -1,6 +1,6 @@
 // Tracks the peaks in the signal stream using the attack and release parameters
 
-template <typename Value=float>
+template <typename ValueType=float>
 class EnvelopeFollower
 {
 public:
@@ -9,7 +9,7 @@ public:
     m_env=0;
   }
 
-  Value Value() 
+  double Value() 
   {
     return m_env;
   }
@@ -20,11 +20,11 @@ public:
     m_r = pow (0.01, 1.0 / (releaseMs * sampleRate * 0.001));
   }
 
-  void Process (Value src)
+  void Process (ValueType src)
   {
-      Value cur = src;
+      ValueType cur = src;
 
-      double e = m_env[0];
+      double e = m_env;
 
       double v = std::abs(cur);
       if (v > e)
@@ -32,7 +32,7 @@ public:
       else
         e = m_r * (e - v) + v;
 
-      m_env[0]=e;
+      m_env=e;
   }
 
   double m_env;

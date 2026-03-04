@@ -88,8 +88,6 @@ int main(void)
 	ramp.SetDecayTime(0.0f);
 	ramp.SetSustainLevel(1.0f);
 
-	
-
 	hw.StartAdc();
 	hw.StartAudio(AudioCallback);
 

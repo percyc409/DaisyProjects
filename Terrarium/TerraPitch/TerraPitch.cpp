@@ -12,9 +12,9 @@ using namespace terrarium;
 
 DaisyPetal hw;
 
-daisysp_modified::PitchShifter166 ps;
 nfctsm_pitch my_ps;
 CrossFade crossfade;
+Adsr ramp;
 
 Parameter Mix;
 Parameter Shift;
@@ -24,10 +24,6 @@ dsy_gpio led1;
 dsy_gpio led2;
 
 bool bypass = true;
-bool ps_mode = true;
-bool jumpAlg;
-bool normalise;
-bool whammy;
 bool whammying;
 int whammy_count = 0;
 
@@ -36,8 +32,6 @@ void ProcessControls() {
 	hw.ProcessAllControls();
 
 	float shift_semi;
-	float shift_ratio;
-
 
 	//footswitch
     if(hw.switches[Terrarium::FOOTSWITCH_1].RisingEdge())
@@ -45,62 +39,27 @@ void ProcessControls() {
         bypass = !bypass;
     }
 
-	//Momentary whammy effect
-	whammy = hw.switches[Terrarium::FOOTSWITCH_2].Pressed() ? true : false;
-
-
 	//Knobs
 	crossfade.SetPos(Mix.Process());
 	shift_semi = round(Shift.Process());
-	int whammy_target = round(Attack.Process());
+	ramp.SetAttackTime(Attack.Process());
+	ramp.SetReleaseTime(Attack.Process());
 
 	if (!bypass) {
-		ps.SetTransposition(shift_semi);
+		my_ps.SetSemitones(static_cast<int>(shift_semi));
+		whammying = false;
+		ramp.Process(false);
 	} else {
+		float ramp_val;
 
-		if(whammy) { //Footswitch2 is pressed
-			
-			whammying = true;
+		ramp_val = ramp.Process(hw.switches[Terrarium::FOOTSWITCH_2].Pressed());
+		float pitch_ratio = powf(2.0f, (shift_semi / 12.0f));
 
-			if (whammy_count < whammy_target) {
-				whammy_count++;
-				shift_ratio = (static_cast<float>(whammy_count)/whammy_target)*shift_semi;
-			} else {
-				shift_ratio = shift_semi;
-			}
+		my_ps.SetPitch(1.0f + ramp_val*(pitch_ratio-1.0f));
 
-			ps.SetTransposition(shift_ratio);
-
-		} else {
-
-			if(whammying) { //Footswitch2 released
-				whammy_count--;
-
-				if (whammy_count <= 0) {
-					whammying = false;
-					whammy_count = 0;
-				}
-
-				shift_ratio = (static_cast<float>(whammy_count)/whammy_target)*shift_semi;
-				ps.SetTransposition(shift_ratio);
-			}
-		}
+		whammying = (ramp_val < 0.001) ? false : true; 
 	}
-
-	
-	//shift_ratio = powf(2.0f, shift_semi/12.0f);
-
-	my_ps.SetSemitones(static_cast<int>(shift_semi));
-	
-
-	ps_mode   = hw.switches[Terrarium::SWITCH_1].Pressed() ? true : false;
-	jumpAlg   = hw.switches[Terrarium::SWITCH_2].Pressed() ? true : false;
-	normalise = hw.switches[Terrarium::SWITCH_3].Pressed() ? true : false;
-
-
-	my_ps.SetAlg(jumpAlg);
-	my_ps.SetNorm(normalise);
-	
+		
 	dsy_gpio_write(&led1, !bypass);
 	dsy_gpio_write(&led2, whammying);
 
@@ -122,14 +81,8 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 		else {
 					
 			dry = in[0][i];
-
-			if (ps_mode) {
-				fx_out = ps.Process(dry);
-
-
-			} else {
-				fx_out = my_ps.Process(dry);
-			}	
+			
+			fx_out = my_ps.Process(dry);
 
 			out[0][i] = crossfade.Process(dry, fx_out);
 		}
@@ -142,14 +95,16 @@ int main(void)
 	hw.SetAudioBlockSize(48); // number of samples handled per callback
 	hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
 
-	ps.Init(hw.AudioSampleRate());
 	my_ps.Init();
 
 	crossfade.Init(CROSSFADE_CPOW);
+	ramp.Init(hw.AudioSampleRate(), hw.AudioBlockSize());
+	ramp.SetDecayTime(0.0f);
+	ramp.SetSustainLevel(1.0f);
 
 	Mix.Init(hw.knob[Terrarium::KNOB_1], 0.0f, 1.0f, Parameter::LINEAR);
 	Shift.Init(hw.knob[Terrarium::KNOB_2], -12.0f, 12.0f, Parameter::LINEAR);
-	Attack.Init(hw.knob[Terrarium::KNOB_3], 5, MAX_ATTACK, Parameter::LINEAR);
+	Attack.Init(hw.knob[Terrarium::KNOB_3], 0.005f, 0.6f, Parameter::LINEAR);
 
 	hw.StartAdc();
 	hw.StartAudio(AudioCallback);

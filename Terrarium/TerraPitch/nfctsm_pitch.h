@@ -1,10 +1,13 @@
 // Real time Pitch shifter based on NORMALIZED FILTERED CORRELATION TIME-SCALE MODIFICATION
 // Paper: https://www.dafx.de/paper-archive/2007/Papers/p007.pdf 
+// Parameters set based on 48KHz sample rate and assuming lowest frequency in input signal being 60Hz
 
 #pragma once
 #include "daisysp.h"
 #include "EnvelopeFollower.h"
 #include <stdlib.h>
+
+#define SEARCH_DOWNSAMPLE 7
 
 using namespace daisysp;
 
@@ -28,27 +31,22 @@ class nfctsm_pitch
  
             cf_i = 1;
             crossfading = false;
-            update_rd_ptr = false;
 
             lp_filt.Init();
             lp_filt.SetFrequency(0.01875f); // 800Hz
             env_flwr.Setup(48000, 50, 100);
         }
 
-        float Process(float &in) {
+        float Process(float in) {
 
             // Write to Buffer
 
             audio_buffer[wr_ptr] = in;
-
+            
             float lp_in = lp_filt.Process(in);
 
-            if (normalise) {
-                env_flwr.Process(lp_in);
-                analysis_buffer[wr_ptr] = lp_in * (1.0f/env_flwr.m_env[0]);
-            } else {
-                analysis_buffer[wr_ptr] = lp_in;
-            }
+            env_flwr.Process(lp_in);
+            analysis_buffer[wr_ptr] = lp_in * (1.0f/env_flwr.m_env);
             
             wr_ptr = (wr_ptr + 1) % BUF_SIZE;
 
@@ -62,7 +60,7 @@ class nfctsm_pitch
                 cf_a = LinIntrp(rd_ptr);
                 cf_b = LinIntrp(cf_rd_ptr);
 
-                cf_ratio = (static_cast<float>(cf_i )/ static_cast<float>(crossfade_len));
+                cf_ratio = (static_cast<float>(cf_i)/ static_cast<float>(crossfade_len));
 
                 out = (cf_a * cf_ratio) + (cf_b * (1.0f - cf_ratio));
                 cf_i++;
@@ -90,15 +88,7 @@ class nfctsm_pitch
             if (delay < 0) delay = delay + BUF_SIZE;
 
             if (delay >= MAX_DELAY || delay <= MIN_DELAY)  {
-                //update_rd_ptr = true; 
-
-                if (jumpalg) {     
-                    JumpReadPointer(); 
-                }
-                else {
-                    JumpReadPointer1(); 
-                }
-
+                JumpReadPointer(); 
             } 
             
             return out;
@@ -122,67 +112,46 @@ class nfctsm_pitch
             shift_up = (pitch_ratio > 1.0f) ? true : false;
 
         }
-
-        inline void SetAlg(bool a){jumpalg = a; }
-
-
-        inline void SetNorm(bool a){normalise = a; }
-
-
-        inline bool Update() {return update_rd_ptr;};
-
-
-
-        void JumpReadPointer1() {
-
-            //Update Pointers
-            cf_rd_ptr = rd_ptr;
-            
-            rd_ptr = static_cast<float>((wr_ptr - 850) % BUF_SIZE);
-
-            crossfading = true;
-            update_rd_ptr = false;
-        }
-
+        
 
         void JumpReadPointer() {
 
             volatile size_t start_cw;
-            volatile  size_t start_sw;
+            volatile size_t start_sw;
 
             volatile float corr_out;
             volatile float min_val;
-            volatile size_t min_i = 0;
-            volatile float sw;      
+            volatile size_t min_i;
+            volatile float sw; 
+            volatile float cw;     
 
             start_cw = static_cast<int>(round(rd_ptr));
 
             if (shift_up) {
-                start_sw = (wr_ptr - MAX_T - MIN_DELAY + BUF_SIZE) % BUF_SIZE;
+                start_sw = (wr_ptr - MAX_T - MIN_DELAY - L_CORR_WIN + BUF_SIZE) % BUF_SIZE;
+                start_cw = (static_cast<int>(round(rd_ptr))+ BUF_SIZE-L_CORR_WIN) % BUF_SIZE;
             }
             else {    
                 start_sw = (wr_ptr - MAX_T + BUF_SIZE) % BUF_SIZE;
-            }
-
-            // Fill correlation windows
-            for (size_t i = 0; i < L_CORR_WIN; i++) {
-                correlation_window[i] = analysis_buffer[(start_cw + i) % BUF_SIZE];
+                start_cw = static_cast<int>(round(rd_ptr));
             }
 
             //Correlation + find index of minimum
-            for (size_t i = 0; i < L_SEARCH_WIN; i = i+25) {
+            for (size_t i = 0; i < L_SEARCH_WIN; i=i+SEARCH_DOWNSAMPLE) {
                 
                 corr_out = 0.0f;
 
-                for (size_t j = 0; j < L_CORR_WIN; j++) {
+                for (size_t j = 0; j < L_CORR_WIN; j=j+SEARCH_DOWNSAMPLE) {
 
                     sw = analysis_buffer[(start_sw + i + j) % BUF_SIZE];
+                    cw = analysis_buffer[(start_cw + j) % BUF_SIZE];
 
-                    corr_out += fabs(sw - correlation_window[j]);
+                    corr_out += fabs(sw - cw);
                 } 
 
                 if (i == 0) {
                     min_val = corr_out;
+                    min_i = i;
                 } else if (corr_out < min_val) {
                     min_val = corr_out;
                     min_i = i;
@@ -190,8 +159,13 @@ class nfctsm_pitch
             }
 
             //Update Pointers
-            cf_rd_ptr = rd_ptr;  
-            rd_ptr = (start_sw + min_i) % BUF_SIZE;     
+            cf_rd_ptr = rd_ptr;
+
+            if(shift_up) {
+                rd_ptr = (start_sw + min_i + L_CORR_WIN) % BUF_SIZE; 
+            } else {
+                rd_ptr = (start_sw + min_i) % BUF_SIZE; 
+            }    
 
             crossfading = true;
         }
@@ -199,7 +173,7 @@ class nfctsm_pitch
     protected:
 
 
-        inline const float LinIntrp(float ptr) const
+        inline float LinIntrp(float ptr)
         {
             int32_t ptr_int   = static_cast<int32_t>(ptr);
             float   ptr_frac  = ptr - static_cast<float>(ptr_int);
@@ -211,28 +185,27 @@ class nfctsm_pitch
 
 
         OnePole lp_filt;
-        EnvelopeFollower< 1, float> env_flwr;
+        EnvelopeFollower<> env_flwr;
 
         const static size_t MAX_DELAY = 1600;
         const static size_t MIN_DELAY = 100;
-        const static size_t BUF_SIZE = 2000;
+        const static size_t BUF_SIZE = 3000;
         const size_t MAX_T = 800;  // Period of 60hz in samples
         const size_t crossfade_len = 50;
-        const static size_t L_CORR_WIN = 200;
-        const size_t L_SEARCH_WIN = 600;
+        const static size_t L_CORR_WIN = 300;
+        const size_t L_SEARCH_WIN = 500;
 
         float audio_buffer[BUF_SIZE];
         float analysis_buffer[BUF_SIZE];
-        float correlation_window[L_CORR_WIN];
         int   wr_ptr;
         float rd_ptr;
         float delay;
         float pitch_ratio;
-        bool update_rd_ptr;
         bool shift_up;
 
         bool jumpalg;
         bool normalise;
+        bool filter_analysis_data;
 
         bool  crossfading;
         float cf_rd_ptr;
