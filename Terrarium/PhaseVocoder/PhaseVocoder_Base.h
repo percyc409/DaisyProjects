@@ -1,5 +1,5 @@
 #pragma once
-#include "../../Utils/STFT_Base.h"
+#include "../../Utils/STFT_hmcp.h"
 #include "../../../ChowDSP/include/math_approx/src/trig_approx.hpp"
 
 #define PI 3.1415926535897932384626433832795
@@ -7,19 +7,19 @@
 #define TWO_PI 6.28318530718f
 
 template <size_t FFT_SIZE, size_t LAPS>
-class PhaseVocoder_Base : public STFT_Base<FFT_SIZE, LAPS>
+class PhaseVocoder_Base : public STFT_hmcp<FFT_SIZE, LAPS>
 {
 public:
 
     PhaseVocoder_Base() {
 
         for (size_t n = 0; n < FFT_SIZE/2; n++){
-            bin_centre_frequency[n] = -(TWO_PI * fmodf((float)n * (float)this->stride / (float)FFT_SIZE, 1.0f));
+            bin_centre_frequency[n] = -(TWO_PI * fmodf((float)n * (float)this->STRIDE / (float)FFT_SIZE, 1.0f));
             last_phase_in[n] = 0.0f;
             last_phase_out[n] = 0.0f;
         }
-        phase2dev = -(float)FFT_SIZE / ((float)this->stride * TWO_PI);
-        dev2phase = -(TWO_PI * (float)this->stride) / (float)FFT_SIZE;
+        phase2dev = -(float)FFT_SIZE / ((float)this->STRIDE * TWO_PI);
+        dev2phase = -(TWO_PI * (float)this->STRIDE) / (float)FFT_SIZE;
         num_bins = FFT_SIZE/2;
     }
 
