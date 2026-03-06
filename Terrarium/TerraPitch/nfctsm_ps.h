@@ -11,11 +11,11 @@
 
 using namespace daisysp;
 
-class nfctsm_pitch
+class nfctsm_ps
 {
     public:
-        nfctsm_pitch() {}
-        ~nfctsm_pitch() {}
+        nfctsm_ps() {}
+        ~nfctsm_ps() {}
 
         void Init() { 
 

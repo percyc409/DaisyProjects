@@ -1,10 +1,7 @@
 #include "daisy_petal.h"
 #include "daisysp.h"
 #include "terrarium.h"
-#include "nfctsm_pitch.h"
-#include "../../Utils/pitch_shifter166.h"
-
-#define MAX_ATTACK static_cast<size_t>(1000 * 2.0f) // SR/size * 2seconds
+#include "nfctsm_ps_bass.h"
 
 using namespace daisy;
 using namespace daisysp;
@@ -12,7 +9,7 @@ using namespace terrarium;
 
 DaisyPetal hw;
 
-nfctsm_pitch my_ps;
+nfctsm_ps_bass my_ps;
 CrossFade crossfade;
 Adsr ramp;
 
@@ -33,32 +30,29 @@ void ProcessControls() {
 
 	float shift_semi;
 
-	//footswitch
-    if(hw.switches[Terrarium::FOOTSWITCH_1].RisingEdge())
-    {
-        bypass = !bypass;
-    }
-
 	//Knobs
 	crossfade.SetPos(Mix.Process());
 	shift_semi = round(Shift.Process());
 	ramp.SetAttackTime(Attack.Process());
 	ramp.SetReleaseTime(Attack.Process());
 
+	//footswitch
+    if(hw.switches[Terrarium::FOOTSWITCH_1].RisingEdge())
+    {
+        bypass = !bypass;
+    }
+
+	//Pitch Shifting
+	float ramp_val = ramp.Process(hw.switches[Terrarium::FOOTSWITCH_2].Pressed());
+	float pitch_ratio = powf(2.0f, (shift_semi / 12.0f));
+
 	if (!bypass) {
-		my_ps.SetSemitones(static_cast<int>(shift_semi));
-		whammying = false;
-		ramp.Process(false);
+		my_ps.SetPitch(pitch_ratio - ramp_val*(pitch_ratio-1.0f));
 	} else {
-		float ramp_val;
-
-		ramp_val = ramp.Process(hw.switches[Terrarium::FOOTSWITCH_2].Pressed());
-		float pitch_ratio = powf(2.0f, (shift_semi / 12.0f));
-
 		my_ps.SetPitch(1.0f + ramp_val*(pitch_ratio-1.0f));
-
-		whammying = (ramp_val < 0.001) ? false : true; 
 	}
+
+	whammying = (ramp_val < 0.001) ? false : true; 
 		
 	dsy_gpio_write(&led1, !bypass);
 	dsy_gpio_write(&led2, whammying);
@@ -78,12 +72,9 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 			out[0][i] = in[0][i];
 			out[1][i] = in[1][i];
 		}
-		else {
-					
+		else {	
 			dry = in[0][i];
-			
 			fx_out = my_ps.Process(dry);
-
 			out[0][i] = crossfade.Process(dry, fx_out);
 		}
 	}
@@ -103,15 +94,13 @@ int main(void)
 	ramp.SetSustainLevel(1.0f);
 
 	Mix.Init(hw.knob[Terrarium::KNOB_1], 0.0f, 1.0f, Parameter::LINEAR);
-	Shift.Init(hw.knob[Terrarium::KNOB_2], -12.0f, 12.0f, Parameter::LINEAR);
-	Attack.Init(hw.knob[Terrarium::KNOB_3], 0.005f, 0.6f, Parameter::LINEAR);
+	Shift.Init(hw.knob[Terrarium::KNOB_2], -12.0f, 12.0f, Parameter::LINEAR); //-12 to 12 notes
+	Attack.Init(hw.knob[Terrarium::KNOB_3], 0.05f, 1.2f, Parameter::LINEAR); //50 to 1200ms
 
 	hw.StartAdc();
 	hw.StartAudio(AudioCallback);
 
-
 	//Init LEDs
-
 	led1.pin = hw.seed.GetPin(22);
     led1.mode = DSY_GPIO_MODE_OUTPUT_PP;
     led1.pull = DSY_GPIO_NOPULL;
