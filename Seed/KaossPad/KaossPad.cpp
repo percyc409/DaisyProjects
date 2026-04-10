@@ -1,36 +1,38 @@
-#include "daisy_seed.h"
+#include "daisy_pad.h"
 #include "daisysp.h"
-#include "cts_encoder.h"
 
 using namespace daisy;
 using namespace daisysp;
 
-DaisySeed hw;
-
-// SpiHandle object and Spi Configuration object
-SpiHandle spi_handle;
-SpiHandle::Config spi_conf;
-GPIO touch_detect;
+DaisyPad hw;
 
 //Encoder
-constexpr Pin ENC_A_PIN     = seed::D26;
-constexpr Pin ENC_B_PIN     = seed::D25;
-constexpr Pin ENC_CLICK_PIN = seed::D13;
-Cts_Encoder encoder;
-volatile int enc_val;
+volatile uint32_t enc_val;
 bool enc_button;
 
-uint8_t tx_buffer[3];
-uint8_t rx_buffer[3];
+//Midi
+uint8_t note;
+bool midi_received = false;
 
-uint16_t x_axis, y_axis;
+//DMA Memory
+uint8_t DMA_BUFFER_MEM_SECTION dma_buffer[16];
 
 
 void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t size)
 {
-	encoder.Debounce();
-	enc_val += encoder.Increment();
-	enc_button = encoder.Pressed();
+	hw.ProcessAllControls();
+	if (hw.encoder.Increment() !=0) {
+		if ((enc_val == 0) && (hw.encoder.Increment() == -1)) {
+		enc_val = 99;
+		} else {
+			enc_val = (enc_val + hw.encoder.Increment()) % 100;
+		}
+		hw.SetLedMode(DaisyPad::CHANGE_STATE);
+	}
+	
+	
+	hw.display_num = enc_val;
+	enc_button = hw.encoder.Pressed();
 
 	for (size_t i = 0; i < size; i++)
 	{
@@ -41,61 +43,64 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 
 int main(void)
 {
-	hw.Init();
+	hw.Init(dma_buffer);
 	hw.SetAudioBlockSize(4); // number of samples handled per callback
 	hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
+	hw.StartAudio(AudioCallback);
+	hw.StartAdc();
+	hw.seed.StartLog();
+	hw.midi.StartReceive();
 
-	// Set some configurations
-	spi_conf.periph = SpiHandle::Config::Peripheral::SPI_1;
-	spi_conf.mode = SpiHandle::Config::Mode::MASTER;
-	spi_conf.direction = SpiHandle::Config::Direction::TWO_LINES;
-	spi_conf.nss = SpiHandle::Config::NSS::HARD_OUTPUT;
-	spi_conf.datasize = 8;
-	spi_conf.clock_polarity = SpiHandle::Config::ClockPolarity::HIGH;
-	spi_conf.clock_phase = SpiHandle::Config::ClockPhase::TWO_EDGE;
-	spi_conf.baud_prescaler = SpiHandle::Config::BaudPrescaler::PS_32;
-	spi_conf.pin_config.sclk = Pin(PORTG, 11);
-	spi_conf.pin_config.miso = Pin(PORTB, 4);
-	spi_conf.pin_config.mosi = Pin(PORTB, 5);
-	spi_conf.pin_config.nss = Pin(PORTG, 10);
-
-	// Initialize the handle using our configuration
-	spi_handle.Init(spi_conf);
-	touch_detect.Init(seed::D0, GPIO::Mode::INPUT, GPIO::Pull::PULLUP);
-
-	encoder.Init(ENC_A_PIN, ENC_B_PIN, ENC_CLICK_PIN);
+	note = 0;
 	enc_val = 0;
 
-	hw.StartLog();
-	
-	hw.StartAudio(AudioCallback);
-
-	tx_buffer[1] = 0x0;
-	tx_buffer[2] = 0x0; 
+	int last_print = System::GetNow();
 	
 	while(1) {
-		
-		if(!touch_detect.Read()) { 
-			tx_buffer[0] = 0xd0;
-			spi_handle.BlockingTransmitAndReceive(tx_buffer, rx_buffer, 3);
-			x_axis = (rx_buffer[1] << 5) + (rx_buffer[2] >> 3);
 
-			tx_buffer[0] = 0x90;
-			spi_handle.BlockingTransmitAndReceive(tx_buffer, rx_buffer, 3);
-			y_axis = (rx_buffer[1] << 5) + (rx_buffer[2] >> 3);
+		int midi_type = 0;
 
-			hw.PrintLine("X axis: %d", x_axis);
-			hw.PrintLine("Y axis: %d", y_axis);
-			hw.PrintLine("Encoder Value: %d", enc_val);
-			hw.PrintLine("Encoder Button: %d", enc_button);
-			hw.PrintLine("* * * * * * * * * * * * * * * *");
-		} else {
-			hw.PrintLine("No Touch Detected");
-			hw.PrintLine("Encoder Value: %d", enc_val);
-			hw.PrintLine("Encoder Button: %d", enc_button);
-			hw.PrintLine("* * * * * * * * * * * * * * * *");
+		if(hw.midi.HasEvents())
+        {
+            MidiEvent m = hw.midi.PopEvent();
+			midi_received = true;
+			midi_type = m.type;
+
+			if (m.type == NoteOn) {
+				note = m.data[0];
+			}
+
+        }
+
+		hw.ProcessPeripherals();
+		hw.UpdateLed();
+
+		//Printing Results
+		int now = System::GetNow();
+
+		if (now - last_print > 2000) { //Print every 2 seconds
+
+			last_print = now;
+
+			if(!hw.touch_detect.Read()) { 
+				hw.seed.PrintLine("X axis: %d", hw.x_axis);
+				hw.seed.PrintLine("Y axis: %d", hw.y_axis);
+			} else {
+				hw.seed.PrintLine("No Touch Detected");
+			}
+
+			hw.seed.PrintLine("Encoder Value: %d", enc_val);
+			hw.seed.PrintLine("Encoder Button: %d", enc_button);
+			hw.seed.PrintLine("Knob 1: %d, Knob 2: %d", static_cast<int>(hw.GetKnobValue(DaisyPad::KNOB_1)*1024), static_cast<int>(hw.GetKnobValue(DaisyPad::KNOB_2)*1024));
+
+			if (midi_received) {
+				hw.seed.PrintLine("Midi Message Received!");
+				hw.seed.PrintLine("Midi Message Type: %d", midi_type);
+				midi_received = false;
+			}
+			hw.seed.PrintLine("Midi Note: %d", note); 
+			hw.seed.PrintLine("* * * * * * * * * * * * * * * *");
+
 		}
-
-		System::Delay(2000);
 	}
 }

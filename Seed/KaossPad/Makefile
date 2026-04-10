@@ -2,7 +2,7 @@
 TARGET = KaossPad
 
 # Sources
-CPP_SOURCES = KaossPad.cpp cts_encoder.cpp
+CPP_SOURCES = KaossPad.cpp cts_encoder.cpp daisy_pad.cpp
 
 # Library Locations
 LIBDAISY_DIR = ../../../DaisyExamples/libDaisy/
