@@ -9,8 +9,8 @@ using namespace daisysp;
 using namespace terrarium;
 
 DaisyPetal hw;
-dsy_gpio led1;
-dsy_gpio led2;
+GPIO led1;
+GPIO led2;
 
 Compressor comp;
 StutterGlitch glitch;
@@ -65,7 +65,7 @@ void ProcessControls() {
     }
 	
     //Led1
-	dsy_gpio_write(&led2, !bypassComp);
+	led2.Write(!bypassComp);
 
     //Led2
     float gain;
@@ -76,12 +76,12 @@ void ProcessControls() {
                         gain = comp.GetGain();
 
                         if (gain - makeup.Process() < -0.5f) // Checking whether applied gain  is less than -0.5dB (Without makeup gain)
-                            dsy_gpio_write(&led1, true);
+                            led1.Write(true);
                         else 
-                            dsy_gpio_write(&led1, false);
+                            led1.Write(false);
                         break;
         
-        case od:        dsy_gpio_write(&led1, !bypassGlitch);
+        case od:        led1.Write(!bypassGlitch);
                         break;
     }
 
@@ -145,15 +145,21 @@ int main(void)
 	hw.StartAdc();
 	hw.StartAudio(AudioCallback);
 
-	led1.pin = hw.seed.GetPin(22);
-    led1.mode = DSY_GPIO_MODE_OUTPUT_PP;
-    led1.pull = DSY_GPIO_NOPULL;
-    dsy_gpio_init(&led1);
+    GPIO::Config cfg1, cfg2;
 
-    led2.pin = hw.seed.GetPin(23);
-    led2.mode = DSY_GPIO_MODE_OUTPUT_PP;
-    led2.pull = DSY_GPIO_NOPULL;
-    dsy_gpio_init(&led2);
+    cfg1.mode = GPIO::Mode::OUTPUT;
+    cfg1.pull = GPIO::Pull::PULLUP;
+    cfg1.speed = GPIO::Speed::LOW;
+    cfg1.pin = seed::D22;
+
+	led1.Init(cfg1);
+
+    cfg2.mode = GPIO::Mode::OUTPUT;
+    cfg2.pull = GPIO::Pull::PULLUP;
+    cfg2.speed = GPIO::Speed::LOW;
+    cfg2.pin = seed::D23;
+
+	led2.Init(cfg2);
 
 	while(1) {
         

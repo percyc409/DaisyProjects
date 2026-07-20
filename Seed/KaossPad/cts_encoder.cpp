@@ -2,28 +2,22 @@
 
 using namespace daisy;
 
-void Cts_Encoder::Init(dsy_gpio_pin a,
-                   dsy_gpio_pin b,
-                   dsy_gpio_pin click,
+void Cts_Encoder::Init(Pin a,
+                   Pin b,
+                   Pin click,
                    float        update_rate)
 {
     last_update_ = System::GetNow();
     updated_     = false;
 
     // Init GPIO for A, and B
-    hw_a_.pin  = a;
-    hw_a_.mode = DSY_GPIO_MODE_INPUT;
-    hw_a_.pull = DSY_GPIO_PULLUP;
-    hw_b_.pin  = b;
-    hw_b_.mode = DSY_GPIO_MODE_INPUT;
-    hw_b_.pull = DSY_GPIO_PULLUP;
-    dsy_gpio_init(&hw_a_);
-    dsy_gpio_init(&hw_b_);
+    hw_a_.Init(a, GPIO::Mode::INPUT, GPIO::Pull::PULLUP);
+    hw_b_.Init(b, GPIO::Mode::INPUT, GPIO::Pull::PULLUP);
     // Default Initialization for Switch
     sw_.Init(click);
     // Set initial states, etc.
     inc_ = 0;
-    p_state_ = dsy_gpio_read(&hw_a_) | (dsy_gpio_read(&hw_b_) << 1);
+    p_state_ = hw_a_.Read() | ((hw_b_.Read()) << 1);
 }
 
 void Cts_Encoder::Debounce()
@@ -37,7 +31,7 @@ void Cts_Encoder::Debounce()
         last_update_ = now;
         updated_     = true;
 
-        uint8_t state = dsy_gpio_read(&hw_a_) | (dsy_gpio_read(&hw_b_) << 1);
+        uint8_t state = hw_a_.Read() | ((hw_b_.Read()) << 1);
 
         if (state != p_state_){
             // infer increment direction

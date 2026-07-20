@@ -22,9 +22,9 @@ class Cts_Encoder
     /** Initializes the encoder with the specified hardware pins.
      * Update rate is to be deprecated in a future release
      */
-    void Init(dsy_gpio_pin a,
-              dsy_gpio_pin b,
-              dsy_gpio_pin click,
+    void Init(Pin a,
+              Pin b,
+              Pin click,
               float        update_rate = 0.f);
     /** Called at update_rate to debounce and handle timing for the switch.
      * In order for events not to be missed, its important that the Edge/Pressed checks be made at the same rate as the debounce function is being called.
@@ -55,7 +55,7 @@ class Cts_Encoder
     uint32_t last_update_;
     bool     updated_;
     Switch   sw_;
-    dsy_gpio hw_a_, hw_b_;
+    GPIO hw_a_, hw_b_;
     uint8_t  p_state_;
     int32_t  inc_;
 };

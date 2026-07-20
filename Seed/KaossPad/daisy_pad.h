@@ -2,7 +2,7 @@
 #ifndef DSY_PAD
 #define DSY_PAD
 
-#include "../../DaisyExamples/libDaisy/src/daisy_seed.h"
+#include "../../../DaisyExamples/libDaisy/src/daisy_seed.h"
 #include "cts_encoder.h"
 
 namespace daisy
@@ -24,7 +24,8 @@ class DaisyPad
     {
         INIT, 
         CHANGE_STATE,
-        XY_TRACKER
+        XY_TRACKER,
+        LED_OFF
     };
 
     /** Switches */
@@ -136,7 +137,7 @@ class DaisyPad
         *buttons[BUTTON_LAST];
     GPIO touch_detect;
     MidiUartHandler midi;
-    uint16_t x_axis, y_axis;
+    int x_axis, y_axis;
     int display_num;
 
   private:
