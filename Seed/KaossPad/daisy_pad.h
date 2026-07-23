@@ -128,7 +128,7 @@ class DaisyPad
 
     /** Public Members */
     DaisySeed     seed;
-    Cts_Encoder   encoder;
+    Encoder   encoder;
     AnalogControl knob1,      
         knob2,                
         *knobs[KNOB_LAST];    

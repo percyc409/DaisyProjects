@@ -10,13 +10,13 @@ using namespace daisy;
 constexpr Pin SCREEN_IRQ    = seed::D17;
 constexpr Pin I2S_SCL       = seed::D11;
 constexpr Pin I2S_SDA       = seed::D12;
-constexpr Pin ENC_A_PIN     = seed::D3;
-constexpr Pin ENC_B_PIN     = seed::D5;
+constexpr Pin ENC_A_PIN     = seed::D5;
+constexpr Pin ENC_B_PIN     = seed::D3;
 constexpr Pin ENC_CLICK_PIN = seed::D1;
-constexpr Pin SW_1_PIN      = seed::D15;
-constexpr Pin SW_2_PIN      = seed::D16;
-constexpr Pin KNOB_1_PIN    = seed::D20;
-constexpr Pin KNOB_2_PIN    = seed::D21;
+constexpr Pin SW_1_PIN      = seed::D16;
+constexpr Pin SW_2_PIN      = seed::D15;
+constexpr Pin KNOB_1_PIN    = seed::D21;
+constexpr Pin KNOB_2_PIN    = seed::D20;
 
 
 void DaisyPad::Init(uint8_t *dma_buff16, bool boost)
