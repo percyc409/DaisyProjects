@@ -103,7 +103,7 @@ int main(void)
 	enc_val = 0;
 	led_off = false;
 
-	int last_print = System::GetNow();
+	//int last_print = System::GetNow();
 	
 	while(1) {
 
@@ -122,14 +122,10 @@ int main(void)
 
         }
 
-		if (enc_val < 2) {
-			hw.ProcessPeripherals();
-		}
-		hw.UpdateLed();
-		
+		hw.ProcessPeripherals();
 
 		//Printing Results
-		int now = System::GetNow();
+		/*int now = System::GetNow();
 
 		if (now - last_print > 2000) { //Print every 2 seconds
 
@@ -154,6 +150,6 @@ int main(void)
 			hw.seed.PrintLine("Midi Note: %d", note); 
 			hw.seed.PrintLine("* * * * * * * * * * * * * * * *"); 
 
-		}
+		}*/
 	}
 }

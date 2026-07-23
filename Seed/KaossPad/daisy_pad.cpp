@@ -5,6 +5,7 @@ using namespace daisy;
 #define XY_BOUND 648
 #define I2C_ADDRESS 0x70
 #define TOUCH_REFRESH_RATE 20
+#define BATTERY_CHECK_RATE 10000
 
 //Pins
 constexpr Pin SCREEN_IRQ    = seed::D17;
@@ -49,9 +50,6 @@ void DaisyPad::Init(uint8_t *dma_buff16, bool boost)
 
     //Led Matrix Init
     LedMatrixInit();
-    last_led_update = System::GetNow();
-    last_screen_read = System::GetNow();
-    led_mode = INIT;
 
     //Encoder Init
 	encoder.Init(ENC_A_PIN, ENC_B_PIN, ENC_CLICK_PIN);
@@ -81,6 +79,8 @@ void DaisyPad::Init(uint8_t *dma_buff16, bool boost)
     //Midi Init
 	MidiUartHandler::Config midi_config;
     midi.Init(midi_config);
+
+    batt_volt = 5.0f;
 
 }
 
@@ -176,8 +176,14 @@ void DaisyPad::ProcessDigitalControls()
 
 void DaisyPad::ProcessPeripherals()
 {   
-    
-    // update no faster than 10Hz
+    ReadTouchscreen();
+    UpdateLed();
+    CheckBatteryVoltage();
+}
+
+void DaisyPad::ReadTouchscreen() {
+
+    static uint32_t last_screen_read = System::GetNow();
     uint32_t now = System::GetNow();
 
     if (now - last_screen_read > TOUCH_REFRESH_RATE) { // update period duration has passed 
@@ -195,12 +201,11 @@ void DaisyPad::ProcessPeripherals()
             spi_tx_buffer[1] = 0x0;
             spi_tx_buffer[2] = 0x0; 
 
-            spi_tx_buffer[0] = 0x90;
+            spi_tx_buffer[0] = 0x90; // Read XAxis Command
             touchscreen.BlockingTransmitAndReceive(spi_tx_buffer, spi_rx_buffer, 3);
             x_axis0 = (spi_rx_buffer[1] << 5) + (spi_rx_buffer[2] >> 3);
-            //x_axis0 = 4096-x_axis0;
 
-            spi_tx_buffer[0] = 0xd0;
+            spi_tx_buffer[0] = 0xd0; // Read YAxis Command
             touchscreen.BlockingTransmitAndReceive(spi_tx_buffer, spi_rx_buffer, 3);
             y_axis0 = (spi_rx_buffer[1] << 5) + (spi_rx_buffer[2] >> 3);
 
@@ -223,12 +228,11 @@ void DaisyPad::ProcessPeripherals()
             y_axis = y_axis + 0.25f*(y_axis0 - y_axis);
         }
     }
-
 }
 
 void DaisyPad::SetLedMode(DaisyPad::LedMode mode) {
     led_mode = mode;
-    if (mode == CHANGE_STATE) {
+    if (mode == CHANGE_STATE || mode == INIT) {
         led_state_count = 0;
     }
 }
@@ -271,11 +275,13 @@ void DaisyPad::LedMatrixInit() {
         led_matrix_buffer[i]  = 0b00000000; // Clear
     }
 
+    SetLedMode(INIT);
+
 }
 
 void DaisyPad::UpdateLed() {
 
-    // update no faster than 20Hz
+    static uint32_t last_led_update = System::GetNow();
     uint32_t now = System::GetNow();
 
     uint32_t update_period; // LED update period in milliseconds
@@ -299,10 +305,24 @@ void DaisyPad::UpdateLed() {
         last_led_update = now;
 
         led_matrix_buffer[0]  = 0b00000000; // Command: Set Write Pointer to first address in display ram
-        led_matrix_buffer[7]  = (led_mode==INIT || led_mode==LED_OFF) ? 0b00000000 : number7seg(0xff); // Digit 4 to 7 seg diplay
-        led_matrix_buffer[9]  = (led_mode==INIT || led_mode==LED_OFF) ? 0b00000000 : number7seg(0xff); // Digit 3 to 7 seg diplay
-        led_matrix_buffer[11] = (led_mode==INIT || led_mode==LED_OFF) ? 0b00000000 : number7seg((display_num/10)%10); // Digit 2 to 7 seg diplay
-        led_matrix_buffer[13] = (led_mode==INIT || led_mode==LED_OFF) ? 0b00000000 : number7seg(display_num%10); // Digit 1 to 7 seg diplay
+
+        if (button1.Pressed()) {
+            led_matrix_buffer[7]  = number7seg(static_cast<int>(std::floor(batt_volt)), true); // Digit 4 to 7 seg diplay
+            led_matrix_buffer[9]  = number7seg(static_cast<int>(std::floor(batt_volt*10))%10); // Digit 3 to 7 seg diplay
+            led_matrix_buffer[11] = number7seg(static_cast<int>(std::floor(batt_volt*100))%10); // Digit 2 to 7 seg diplay
+            led_matrix_buffer[13] = number7seg(static_cast<int>(std::round(batt_volt*1000))%10); // Digit 1 to 7 seg diplay
+        } else if (button2.Pressed()) {
+            led_matrix_buffer[7]  = number7seg(static_cast<int>(std::floor(knob1.Value()*10))); // Digit 4 to 7 seg diplay
+            led_matrix_buffer[9]  = number7seg(static_cast<int>(std::floor(knob1.Value()*100))%10, true); // Digit 3 to 7 seg diplay
+            led_matrix_buffer[11] = number7seg(static_cast<int>(std::floor(knob2.Value()*10))); // Digit 2 to 7 seg diplay
+            led_matrix_buffer[13] = number7seg(static_cast<int>(std::floor(knob2.Value()*100))%10); // Digit 1 to 7 seg diplay
+        }else {
+            led_matrix_buffer[7]  = (led_mode==INIT || led_mode==LED_OFF) ? 0b00000000 : number7seg(0xff); // Digit 4 to 7 seg diplay
+            led_matrix_buffer[9]  = (led_mode==INIT || led_mode==LED_OFF) ? 0b00000000 : number7seg(0xff); // Digit 3 to 7 seg diplay
+            led_matrix_buffer[11] = (led_mode==INIT || led_mode==LED_OFF) ? 0b00000000 : number7seg((display_num/10)%10); // Digit 2 to 7 seg diplay
+            led_matrix_buffer[13] = (led_mode==INIT || led_mode==LED_OFF) ? 0b00000000 : number7seg(display_num%10); // Digit 1 to 7 seg diplay        
+        }
+        
         uint16_t temp;
         
         switch (led_mode) {
@@ -386,7 +406,7 @@ void DaisyPad::UpdateLed() {
     
 }
 
-uint8_t DaisyPad::number7seg (int num) {
+uint8_t DaisyPad::number7seg (int num, bool point) {
 
     uint8_t segcode;
 
@@ -425,5 +445,35 @@ uint8_t DaisyPad::number7seg (int num) {
             segcode = 0b00000000;  
     }
 
+    if (point) {
+        segcode |= 0x80;
+    }
+
     return segcode;
+}
+
+void DaisyPad::CheckBatteryVoltage() {
+
+    static uint32_t last_batt_check = System::GetNow();
+    uint32_t now = System::GetNow();
+
+    if (now - last_batt_check > BATTERY_CHECK_RATE) { // update period duration has passed 
+        
+        last_batt_check = now;
+
+        int v_batt_adc_read;
+        uint8_t spi_rx_buffer[3];
+        uint8_t spi_tx_buffer[3];
+
+        spi_tx_buffer[1] = 0x0;
+        spi_tx_buffer[2] = 0x0; 
+
+        spi_tx_buffer[0] = 0xA6; //Read Battery Command
+        touchscreen.BlockingTransmitAndReceive(spi_tx_buffer, spi_rx_buffer, 3);
+        v_batt_adc_read = (spi_rx_buffer[1] << 5) + (spi_rx_buffer[2] >> 3);
+
+        //Battery Voltage = ADC_reading * 4 * VRef * 1/4096
+        //VRef = 2.5V. Therefore VRef * 4/4096 =~ 1/410
+        batt_volt = v_batt_adc_read/410.f; 
+    }
 }

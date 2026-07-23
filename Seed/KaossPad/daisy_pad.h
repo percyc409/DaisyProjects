@@ -114,11 +114,11 @@ class DaisyPad
         ProcessDigitalControls();
     }
 
-    /** Handle Digital Peripherals. Keep outside of Audio Callback*/
+    /** Handle Digital Peripherals. Call outside of Audio Callback*/
     void ProcessPeripherals();
 
-    /** Initialise LED Display */
-    void LedMatrixInit();
+    /** Read Touch Screen from TSC2046 via SPI*/
+    void ReadTouchscreen();
 
     /** Update LEDs Display using HT16K33 LED Driver */
     void UpdateLed();
@@ -141,8 +141,18 @@ class DaisyPad
     int display_num;
 
   private:
+
+    /** Initialise LED Display */
+    void LedMatrixInit();
+
+    /** Human Interface Device Update Rates */
     void SetHidUpdateRates();
-    uint8_t number7seg(int num);
+
+    /** Number Digit to 7 seg */
+    uint8_t number7seg(int num, bool point=false);
+
+    /** Read Battery Voltage from TSC2046 via SPI */
+    void CheckBatteryVoltage();
 
     //DMA Memory
     uint8_t *led_matrix_buffer;
@@ -150,8 +160,7 @@ class DaisyPad
     SpiHandle touchscreen;
     I2CHandle led_display;
     volatile LedMode led_mode;
-    uint32_t last_screen_read;
-    uint32_t last_led_update;
+    float batt_volt;
     uint32_t led_state_count;
 
 };
