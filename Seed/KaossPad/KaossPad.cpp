@@ -1,84 +1,192 @@
 #include "daisy_pad.h"
 #include "daisysp.h"
+#include "dig_delay.h"
+#include "midi_clock_handler.h"
 
 using namespace daisy;
 using namespace daisysp;
 
+#define MAX_DELAY static_cast<size_t>(48000 * 1.0f)
+#define MIN_DELAY static_cast<size_t>(48000 * 0.05f)
+
 DaisyPad hw;
 
-//Effect - Low Pass Filter
+/** LED Matrix Mode */
+enum FXMode
+{
+	FILTER, 
+	DELAY,
+	TREMOLO
+};
+constexpr int FX_COUNT = 3;
+
+//Effects Classes
+Dig_Delay<MAX_DELAY> echo[2];
+DelayLine<float, MAX_DELAY> DSY_SDRAM_BSS delmem[2];
 LadderFilter lpfilt[2];
 Tremolo trem[2];
+midi_clock_handler midi_clk_detect;
 
-//Encoder
-volatile uint32_t enc_val;
-bool enc_button;
-bool button1;
-bool button2;
-bool led_off;
+FXMode active_fx = FILTER;
+volatile uint32_t param_change_time;
+float knob1_prev, knob2_prev;
 
 //Midi
-uint8_t note;
-bool midi_received = false;
+//uint8_t note;
+//bool midi_received = false;
 
 //DMA Memory
 uint8_t DMA_BUFFER_MEM_SECTION dma_buffer[16];
 
+void ProcessControls() {
+
+	hw.ProcessAllControls();
+
+	if (hw.encoder.Increment() !=0) {
+		
+		int temp  = static_cast<int>(active_fx) + hw.encoder.Increment();
+		active_fx = static_cast<FXMode>((temp + FX_COUNT) % FX_COUNT);
+
+		hw.SetLedMode(DaisyPad::CHANGE_STATE);
+
+		switch (active_fx) {
+			
+			case FILTER :
+				hw.Set7SegCode(0x71387850); // FLTR
+				hw.XAxisParam(20.0f, 20000.0f, DaisyPad::EXPONENTIAL);
+    			hw.YAxisParam(0.0f, 1.0f, DaisyPad::LINEAR);
+				break;
+			case DELAY :
+				hw.Set7SegCode(0x7939765C); // ECHO
+				//hw.XAxisParam(MIN_DELAY, MAX_DELAY, DaisyPad::EXPONENTIAL); // Free Time Mode
+				hw.XAxisParam(0, 8, DaisyPad::LINEAR); //Midi Sync Mode
+    			hw.YAxisParam(0.0f, 1.0f, DaisyPad::LINEAR);
+				break;
+			case TREMOLO :
+				hw.Set7SegCode(0x78507955); // TREM
+				//hw.XAxisParam(0.25f, 20.0f, DaisyPad::LOGARITHMIC); // Free Time Mode
+				hw.XAxisParam(0, 8, DaisyPad::LINEAR); //Midi Sync Mode
+    			hw.YAxisParam(0.0f, 1.0f, DaisyPad::LINEAR);
+				break;
+			default : ;
+
+		}
+
+		hw.SetDispMode(DaisyPad::DISP_CODE);
+	}
+
+	if (!hw.touch_detect.Read()) {
+
+		switch (active_fx) {
+			
+			case FILTER :
+				lpfilt[0].SetFreq(hw.ProcessXaxis());
+				lpfilt[0].SetRes(hw.ProcessYaxis());
+				lpfilt[1].SetFreq(hw.ProcessXaxis());
+				lpfilt[1].SetRes(hw.ProcessYaxis());
+				break;
+			case DELAY :
+				//echo[0].SetDelayTime(hw.ProcessXaxis()); // Free Time Mode
+				//echo[1].SetDelayTime(hw.ProcessXaxis()); // Free Time Mode
+				midi_clk_detect.SetSyncDelay(static_cast<midi_clock_handler::SyncNoteValue>(std::floor(hw.ProcessXaxis()))); //Midi Sync Mode
+				echo[0].SetDelayTime(midi_clk_detect.GetSyncDelay()); //Midi Sync Mode
+				echo[1].SetDelayTime(midi_clk_detect.GetSyncDelay()); //Midi Sync Mode
+				echo[0].SetFeedback(hw.ProcessYaxis());
+				echo[1].SetFeedback(hw.ProcessYaxis());
+				break;
+			case TREMOLO :
+				//trem[0].SetFreq(hw.ProcessXaxis());
+				//trem[1].SetFreq(hw.ProcessXaxis());
+				midi_clk_detect.SetSyncDelay(static_cast<midi_clock_handler::SyncNoteValue>(std::floor(hw.ProcessXaxis()))); //Midi Sync Mode
+				trem[0].SetFreq(midi_clk_detect.GetSyncFreq());
+				trem[1].SetFreq(midi_clk_detect.GetSyncFreq());
+				trem[0].SetDepth(hw.ProcessYaxis());
+				trem[1].SetDepth(hw.ProcessYaxis());
+				break;
+			default : ;
+		}
+
+		hw.SetDispMode(DaisyPad::XY_POS);
+		param_change_time = System::GetNow();
+	} 
+	
+	if (abs(hw.knob1.Value() - knob1_prev) > 0.01f) {
+		knob1_prev = hw.knob1.Value();
+
+		switch (active_fx) {
+			case FILTER :
+				lpfilt[0].SetInputDrive(2*hw.knob1.Value());
+				lpfilt[1].SetInputDrive(2*hw.knob1.Value());
+				break;
+			case DELAY :
+				break;
+			case TREMOLO :
+				break;
+			default : ;
+		}
+
+		hw.SetDispMode(DaisyPad::PARAM1);
+		param_change_time = System::GetNow();
+	}
+	if (abs(hw.knob2.Value() - knob2_prev) > 0.01f) {
+		knob2_prev = hw.knob2.Value();
+
+		switch (active_fx) {
+			case FILTER :
+				break;
+			case DELAY :
+				break;
+			case TREMOLO :
+				break;
+			default : ;
+		}
+
+		hw.SetDispMode(DaisyPad::PARAM2);
+		param_change_time = System::GetNow();
+	}
+
+
+	if (hw.encoder.RisingEdge()) {
+		
+		if(hw.button1.Pressed()) {
+			hw.SetDispMode(DaisyPad::BPM);
+		} else {
+			hw.SetDispMode(DaisyPad::V_BATT);
+		}
+		param_change_time = System::GetNow();
+	}
+}
+
 
 void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t size)
 {
-	hw.ProcessAllControls();
-
-	if (enc_val==0) {
-		lpfilt[0].SetFreq(hw.x_axis*1.15f + 5.f);
-		lpfilt[0].SetRes(hw.y_axis/2800.0f);
-		lpfilt[1].SetFreq(hw.x_axis*1.15f + 5.f);
-		lpfilt[1].SetRes(hw.y_axis/2800.0f);
-	} else if (enc_val==1) {
-		trem[0].SetFreq(hw.x_axis/100);
-		trem[1].SetFreq(hw.x_axis/100);
-		trem[0].SetDepth(hw.y_axis/2800.0f);
-		trem[1].SetDepth(hw.y_axis/2800.0f);
-	}
-	
-
-	if (hw.encoder.Increment() !=0) {
-		if ((enc_val == 0) && (hw.encoder.Increment() == -1)) {
-		enc_val = 99;
-		} else {
-			enc_val = (enc_val + hw.encoder.Increment()) % 100;
-		}
-		hw.SetLedMode(DaisyPad::CHANGE_STATE);
-	}
-	
-	
-	hw.display_num = enc_val;
-	enc_button = hw.encoder.Pressed();
-	button1 = hw.button1.Pressed();
-	button2 = hw.button2.Pressed();
-
-	if (hw.encoder.RisingEdge()) {
-		led_off = !led_off;
-
-		if (led_off) {
-			hw.SetLedMode(DaisyPad::LED_OFF);
-		} else {
-			hw.SetLedMode(DaisyPad::XY_TRACKER);
-		}
-	}
+	ProcessControls();
 
 	for (size_t i = 0; i < size; i++)
 	{
-		
-		if (enc_val==0) {
-			out[0][i] = lpfilt[0].Process(in[0][i]);
-			out[1][i] = lpfilt[1].Process(in[1][i]);
-		} else if (enc_val==1) {
-			out[0][i] = trem[0].Process(in[0][i]);
-			out[1][i] = trem[1].Process(in[1][i]);
-		} else {
-			out[0][i] = in[0][i];
-			out[1][i] = in[1][i];
+		switch (active_fx) {
+			
+			case FILTER :
+				if (!hw.touch_detect.Read()) {
+					out[0][i] = lpfilt[0].Process(in[0][i]);
+					out[1][i] = lpfilt[1].Process(in[1][i]);
+				} else {
+					out[0][i] = in[0][i];
+					out[1][i] = in[1][i];
+				}
+				break;
+			case DELAY :
+				out[0][i] = in[0][i] + 0.7f*echo[0].Process(in[0][i]);
+				out[1][i] = in[1][i] + 0.7f*echo[1].Process(in[1][i]);
+				break;
+			case TREMOLO :
+				out[0][i] = trem[0].Process(in[0][i]);
+				out[1][i] = trem[1].Process(in[1][i]);
+				break;
+			default :
+				out[0][i] = in[0][i];
+				out[1][i] = in[1][i];
+
 		}
 	}
 }
@@ -88,68 +196,46 @@ int main(void)
 	hw.Init(dma_buffer);
 	hw.SetAudioBlockSize(4); // number of samples handled per callback
 	hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
-	hw.StartAudio(AudioCallback);
-	hw.StartAdc();
-	hw.seed.StartLog();
+	hw.Set7SegCode(0x71387850); // FLTR
+	hw.XAxisParam(20.0f, 20000.0f, DaisyPad::EXPONENTIAL);
+    hw.YAxisParam(0.0f, 1.0f, DaisyPad::LINEAR);
+	
 	lpfilt[0].Init(hw.AudioSampleRate());
-	lpfilt[0].SetFilterMode(LadderFilter::FilterMode::LP24);
+	lpfilt[0].SetFilterMode(LadderFilter::FilterMode::BP24);
 	lpfilt[1].Init(hw.AudioSampleRate());
-	lpfilt[1].SetFilterMode(LadderFilter::FilterMode::LP24);
+	lpfilt[1].SetFilterMode(LadderFilter::FilterMode::BP24);
+	delmem[0].Init();
+	delmem[1].Init();
+	echo[0].Init(&delmem[0]);
+	echo[1].Init(&delmem[1]);
 	trem[0].Init(hw.AudioSampleRate());
 	trem[1].Init(hw.AudioSampleRate());
+	midi_clk_detect.Init(hw.AudioSampleRate());
 	hw.midi.StartReceive();
 
-	note = 0;
-	enc_val = 0;
-	led_off = false;
-
-	//int last_print = System::GetNow();
+	hw.StartAudio(AudioCallback);
+	hw.StartAdc();
 	
 	while(1) {
 
-		//int midi_type = 0;
+		hw.ProcessPeripherals();
 
 		if(hw.midi.HasEvents())
         {
             MidiEvent m = hw.midi.PopEvent();
-			midi_received = true;
-			//midi_type = m.type;
 
-			if (m.type == NoteOn) {
-				note = m.data[0];
-				hw.seed.PrintLine("Midi Note: %d", note); 
+			if (m.type == SystemRealTime && m.srt_type == TimingClock) {
+				midi_clk_detect.ClockReceived();
+				hw.SetBPM(midi_clk_detect.ClockBPM());
 			}
 
         }
 
-		hw.ProcessPeripherals();
-
-		//Printing Results
-		/*int now = System::GetNow();
-
-		if (now - last_print > 2000) { //Print every 2 seconds
-
-			last_print = now;
-
-			if(!hw.touch_detect.Read()) { 
-				hw.seed.PrintLine("X axis: %d", hw.x_axis);
-				hw.seed.PrintLine("Y axis: %d", hw.y_axis);
-			} else {
-				hw.seed.PrintLine("No Touch Detected");
+		//Return Display to Display Code after 2 Seconds
+		if ((hw.GetDispMode() != DaisyPad::DISP_CODE) && (hw.GetDispMode() != DaisyPad::CLEAR)) {
+			if (System::GetNow() - param_change_time > 2000) {
+				hw.SetDispMode(DaisyPad::DISP_CODE);
 			}
-
-			hw.seed.PrintLine("Encoder Value: %d", enc_val);
-			hw.seed.PrintLine("Encoder Button: %d \tButton 1: %d\tButton 2: %d", enc_button, button1, button2);
-			hw.seed.PrintLine("Knob 1: %d, Knob 2: %d", static_cast<int>(hw.GetKnobValue(DaisyPad::KNOB_1)*1024), static_cast<int>(hw.GetKnobValue(DaisyPad::KNOB_2)*1024));
-
-			if (midi_received) {
-				hw.seed.PrintLine("Midi Message Received!");
-				//hw.seed.PrintLine("Midi Message Type: %d", midi_type);
-				midi_received = false;
-			}
-			hw.seed.PrintLine("Midi Note: %d", note); 
-			hw.seed.PrintLine("* * * * * * * * * * * * * * * *"); 
-
-		}*/
+		}
 	}
 }

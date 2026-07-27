@@ -19,13 +19,25 @@ class DaisyPad
 {
   public:
 
-    /** LedMode */
+    /** LED Matrix Mode */
     enum LedMode
     {
         INIT, 
         CHANGE_STATE,
         XY_TRACKER,
         LED_OFF
+    };
+
+    /** 7 Segment Display Mode */
+    enum DispMode
+    {
+        CLEAR, 
+        DISP_CODE,
+        PARAM1,
+        PARAM2,
+        XY_POS,
+        BPM,
+        V_BATT
     };
 
     /** Switches */
@@ -44,12 +56,26 @@ class DaisyPad
         KNOB_LAST
     };
 
+    /** Curves are applied to the processed touchscreen X and Y axis readings */
+    enum Curve
+    {
+        LINEAR,      /**< Linear curve */
+        EXPONENTIAL, /**< Exponential curve */
+        LOGARITHMIC, /**< Logarithmic curve */
+        CUBE,        /**< Cubic curve */
+        LAST,        /**< Final enum element. */
+    };
+
     DaisyPad() {}
     ~DaisyPad() {}
 
     /** Init related stuff. */
     void Init(uint8_t *dma_buff16, bool boost = false);
 
+    /** X and Y axis Parameter Settings */
+    void XAxisParam(float min, float max, DaisyPad::Curve curve);
+    void YAxisParam(float min, float max, DaisyPad::Curve curve);
+    
     /** Starts the callback
     \param cb Interleaved callback function
     */
@@ -102,6 +128,10 @@ class DaisyPad
     float GetKnobValue(Knob k);
 
     /** Call at same rate as analog reads for smooth reading */
+    float ProcessXaxis();
+    float ProcessYaxis();
+
+    /** Call at same rate as analog reads for smooth reading */
     void ProcessAnalogControls();
 
     /** Process digital controls */
@@ -123,8 +153,23 @@ class DaisyPad
     /** Update LEDs Display using HT16K33 LED Driver */
     void UpdateLed();
 
+    /* Set the 7 Segment Display Code*/
+    inline void Set7SegCode(uint32_t in) {display_code = in;};
+
+    /* Set the 7 Segment Display Mode*/
+    inline void SetDispMode(DaisyPad::DispMode mode) {disp_mode = mode;};
+    
+    /* Get the 7 Segment Display Mode*/
+    inline DaisyPad::DispMode GetDispMode() {return disp_mode;}
+
     /* Set the LED Matrix Mode*/
     void SetLedMode(DaisyPad::LedMode mode);
+
+    /* Get the LED Matrix Mode*/
+    inline DaisyPad::LedMode GetLedMode() {return led_mode;}
+
+    /* Get the LED Matrix Mode*/
+    inline void SetBPM(float bpm) {bpm_disp_val = bpm;}
 
     /** Public Members */
     DaisySeed     seed;
@@ -137,8 +182,6 @@ class DaisyPad
         *buttons[BUTTON_LAST];
     GPIO touch_detect;
     MidiUartHandler midi;
-    int x_axis, y_axis;
-    int display_num;
 
   private:
 
@@ -160,7 +203,14 @@ class DaisyPad
     SpiHandle touchscreen;
     I2CHandle led_display;
     volatile LedMode led_mode;
+    volatile DispMode disp_mode;
+    uint32_t display_code;
+    int x_axis, y_axis;
+    Curve x_curve, y_curve;
+    float x_pmin_, x_pmax_, y_pmin_, y_pmax_;
+    float x_lmin_, x_lmax_, y_lmin_, y_lmax_;
     float batt_volt;
+    float bpm_disp_val;
     uint32_t led_state_count;
 
 };
