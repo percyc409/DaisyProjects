@@ -33,6 +33,7 @@ class DaisyPad
     {
         CLEAR, 
         DISP_CODE,
+        TEMP_DISP_CODE,
         PARAM1,
         PARAM2,
         XY_POS,
@@ -156,6 +157,9 @@ class DaisyPad
     /* Set the 7 Segment Display Code*/
     inline void Set7SegCode(uint32_t in) {display_code = in;};
 
+    /* Set the 7 Segment Tempory Display Code. Code is displayed for 2 seconds before returning to display code*/
+    void SetTemp7SegCode(uint32_t in);
+
     /* Set the 7 Segment Display Mode*/
     inline void SetDispMode(DaisyPad::DispMode mode) {disp_mode = mode;};
     
@@ -167,6 +171,9 @@ class DaisyPad
 
     /* Get the LED Matrix Mode*/
     inline DaisyPad::LedMode GetLedMode() {return led_mode;}
+
+    /* Set Pulse Corners Control*/
+    inline void SetPulseCorners(bool p) {pulse_corners = p;}
 
     /* Get the LED Matrix Mode*/
     inline void SetBPM(float bpm) {bpm_disp_val = bpm;}
@@ -205,6 +212,9 @@ class DaisyPad
     volatile LedMode led_mode;
     volatile DispMode disp_mode;
     uint32_t display_code;
+    uint32_t temp_display_code;
+    uint32_t temp_count_down;
+    bool pulse_corners;
     int x_axis, y_axis;
     Curve x_curve, y_curve;
     float x_pmin_, x_pmax_, y_pmin_, y_pmax_;

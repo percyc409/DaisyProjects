@@ -21,7 +21,9 @@ class midi_clock_handler
         QUARTER,
         TRIPLET_BAR,
         DOTTED_QUARTER,
-        HALF
+        HALF,
+        BAR,
+        TWO_BAR
     };
 
     midi_clock_handler() {}
@@ -30,6 +32,7 @@ class midi_clock_handler
     void Init(float samplerate) {
         clock_period = 0;
         last_clock_time = System::GetTick();
+        beat_count = 0;
         sample_rate = samplerate;
         tick_freq = System::GetTickFreq();
         ticks_per_sample = tick_freq/sample_rate;
@@ -44,18 +47,25 @@ class midi_clock_handler
         }
         
         last_clock_time = now;
+        beat_count = (beat_count+1) % 96; // 4 Bars
+    }
+
+    inline void StartReceived() {
+        beat_count = 0;
     }
 
     void SetSyncDelay (SyncNoteValue SD) {
         switch (SD) {
-            case SIXTEENTH:      sync_multiplier = 6;  break;
-            case TRIPLET:        sync_multiplier = 8;  break;
-            case EIGHT:          sync_multiplier = 12; break;
-            case DOTTED_EIGHT:   sync_multiplier = 18; break;
-            case QUARTER:        sync_multiplier = 24; break;
-            case TRIPLET_BAR:    sync_multiplier = 32; break;
-            case DOTTED_QUARTER: sync_multiplier = 36; break;
-            case HALF:           sync_multiplier = 48; break;
+            case SIXTEENTH:      sync_multiplier = 6;   break;
+            case TRIPLET:        sync_multiplier = 8;   break;
+            case EIGHT:          sync_multiplier = 12;  break;
+            case DOTTED_EIGHT:   sync_multiplier = 18;  break;
+            case QUARTER:        sync_multiplier = 24;  break;
+            case TRIPLET_BAR:    sync_multiplier = 32;  break;
+            case DOTTED_QUARTER: sync_multiplier = 36;  break;
+            case HALF:           sync_multiplier = 48;  break;
+            case BAR:            sync_multiplier = 96;  break;
+            case TWO_BAR:        sync_multiplier = 192; break;
         }
     }
 
@@ -65,13 +75,15 @@ class midi_clock_handler
     inline float ClockBPM(){ return  sample_rate/clock_period * 2.5f;} // 60/24 = 2.5f
     inline uint32_t GetSyncDelay(){ return clock_period*sync_multiplier;};
     inline float GetSyncFreq(){ return sample_rate/(clock_period*sync_multiplier);};
-
+    inline uint32_t GetBeatCount(){ return beat_count;};
+    inline bool IsQuarterNote(){ return (((beat_count %24) == 1) || ((beat_count %24) == 2));}
 
   private:
     
     uint32_t clock_period; // Clock Period in Samples
     uint32_t last_clock_time;
-    float sample_rate;
+    volatile uint32_t beat_count;
+    float    sample_rate;
     uint32_t sync_multiplier;
     uint32_t tick_freq;
     float    ticks_per_sample;

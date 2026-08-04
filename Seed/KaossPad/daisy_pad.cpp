@@ -4,7 +4,8 @@ using namespace daisy;
 
 #define XY_BOUND 648
 #define I2C_ADDRESS 0x70
-#define TOUCH_REFRESH_RATE 20
+#define TOUCH_REFRESH_RATE 20 //20ms = 50Hz
+#define LED_REFRESH_RATE 40 //40ms = 25Hz
 #define BATTERY_CHECK_RATE 10000
 
 //Pins
@@ -55,6 +56,7 @@ void DaisyPad::Init(uint8_t *dma_buff16, bool boost)
     //Led Matrix Init
     LedMatrixInit();
     Set7SegCode(0); // Clear 7 Segment Display
+    pulse_corners = false;
 
     //Encoder Init
 	encoder.Init(ENC_A_PIN, ENC_B_PIN, ENC_CLICK_PIN);
@@ -301,13 +303,6 @@ void DaisyPad::ReadTouchscreen() {
     }
 }
 
-void DaisyPad::SetLedMode(DaisyPad::LedMode mode) {
-    led_mode = mode;
-    if (mode == CHANGE_STATE || mode == INIT) {
-        led_state_count = 0;
-    }
-}
-
 void DaisyPad::LedMatrixInit() {
 
     // Configure the handle
@@ -351,6 +346,20 @@ void DaisyPad::LedMatrixInit() {
 
 }
 
+
+void DaisyPad::SetLedMode(DaisyPad::LedMode mode) {
+    led_mode = mode;
+    if (mode == CHANGE_STATE || mode == INIT) {
+        led_state_count = 0;
+    }
+}
+
+void DaisyPad::SetTemp7SegCode(uint32_t in) {
+    disp_mode = TEMP_DISP_CODE;
+    temp_display_code = in;
+    temp_count_down = 2000/LED_REFRESH_RATE; // 2 Second Count Down
+}
+
 void DaisyPad::UpdateLed() {
 
     static uint32_t last_led_update = System::GetNow();
@@ -360,7 +369,7 @@ void DaisyPad::UpdateLed() {
 
     switch (led_mode) {
         case XY_TRACKER :
-            update_period = 40;
+            update_period = LED_REFRESH_RATE;
             break;
         case CHANGE_STATE :
             update_period = 50;
@@ -393,6 +402,16 @@ void DaisyPad::UpdateLed() {
                 led_matrix_buffer[9]  =  (display_code>>16) & 0xff; // Digit 2 to 7 seg diplay
                 led_matrix_buffer[11] =  (display_code>>8)  & 0xff; // Digit 3 to 7 seg diplay
                 led_matrix_buffer[13] =  (display_code)     & 0xff; // Digit 4 to 7 seg diplay 
+                break; 
+            case TEMP_DISP_CODE :
+                led_matrix_buffer[7]  =  (temp_display_code>>24) & 0xff; // Digit 1 to 7 seg diplay
+                led_matrix_buffer[9]  =  (temp_display_code>>16) & 0xff; // Digit 2 to 7 seg diplay
+                led_matrix_buffer[11] =  (temp_display_code>>8)  & 0xff; // Digit 3 to 7 seg diplay
+                led_matrix_buffer[13] =  (temp_display_code)     & 0xff; // Digit 4 to 7 seg diplay 
+                temp_count_down--;
+                if (temp_count_down == 0) { // 2 Seconds of temporary code display has passed
+                    disp_mode = DISP_CODE;
+                }
                 break; 
             case PARAM1 :
                 led_matrix_buffer[7]  =  0X73; // Digit 1 to 7 seg diplay - P
@@ -455,6 +474,12 @@ void DaisyPad::UpdateLed() {
                     } else {
                         led_matrix_buffer[6-i] = 0b00000000;
                     }
+                }
+
+                if (pulse_corners) {
+                    //Light up Corners of LED Matrix
+                    led_matrix_buffer[1] |= 0x41;
+                    led_matrix_buffer[6] |= 0x41;
                 }
 
                 led_state_count = 0;
