@@ -151,11 +151,20 @@ class DaisyPad
     /** Read Touch Screen from TSC2046 via SPI*/
     void ReadTouchscreen();
 
+    /** TouchScreen IRQ indicates screen is being touched */
+    inline bool TouchingScreen() { return !touch_detect.Read();}
+
+    /**Set Hold XY position so XY position is displayed on the matrix even when screen is not touched */
+    inline void SetHoldXYPos(bool xy) {hold_xy_position = xy;}
+
     /** Update LEDs Display using HT16K33 LED Driver */
     void UpdateLed();
 
     /* Set the 7 Segment Display Code*/
     inline void Set7SegCode(uint32_t in) {display_code = in;};
+
+    /* Get the 7 Segment Display Code*/
+    inline uint32_t Get7SegCode() {return display_code;};
 
     /* Set the 7 Segment Tempory Display Code. Code is displayed for 2 seconds before returning to display code*/
     void SetTemp7SegCode(uint32_t in);
@@ -214,6 +223,7 @@ class DaisyPad
     uint32_t display_code;
     uint32_t temp_display_code;
     uint32_t temp_count_down;
+    bool hold_xy_position;
     bool pulse_corners;
     int x_axis, y_axis;
     Curve x_curve, y_curve;

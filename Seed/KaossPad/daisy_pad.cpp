@@ -57,6 +57,7 @@ void DaisyPad::Init(uint8_t *dma_buff16, bool boost)
     LedMatrixInit();
     Set7SegCode(0); // Clear 7 Segment Display
     pulse_corners = false;
+    hold_xy_position = false;
 
     //Encoder Init
 	encoder.Init(ENC_A_PIN, ENC_B_PIN, ENC_CLICK_PIN);
@@ -458,23 +459,34 @@ void DaisyPad::UpdateLed() {
 
             case XY_TRACKER :
                 
-                temp = y_axis;
+                if (hold_xy_position || TouchingScreen()) {
+                    temp = y_axis;
 
-                for (int i=0; i<6; i++) { //Find Row
-                    if (temp < Y_GRID[i]) {
+                    for (int i=0; i<6; i++) { //Find Row
+                        if (temp < Y_GRID[i]) {
 
-                        for (int j=0; j<7; j++) { // Find Column
-                            if (x_axis < X_GRID[j]) {
-                                led_matrix_buffer[6-i] = 0x1 << (6-j);
-                                break;
+                            for (int j=0; j<7; j++) { // Find Column
+                                if (x_axis < X_GRID[j]) {
+                                    led_matrix_buffer[6-i] = 0x1 << (6-j);
+                                    break;
+                                }
                             }
-                        }
 
-                        temp = 5000; // Set higher than possible to ensure remaining rows are clear
-                    } else {
-                        led_matrix_buffer[6-i] = 0b00000000;
+                            temp = 5000; // Set higher than possible to ensure remaining rows are clear
+                        } else {
+                            led_matrix_buffer[6-i] = 0b00000000;
+                        }
                     }
+                    
+                } else {
+                    led_matrix_buffer[1]  = 0b00000000;
+                    led_matrix_buffer[2]  = 0b00000000;
+                    led_matrix_buffer[3]  = 0b00000000;
+                    led_matrix_buffer[4]  = 0b00000000;
+                    led_matrix_buffer[5]  = 0b00000000;
+                    led_matrix_buffer[6]  = 0b00000000;
                 }
+                
 
                 if (pulse_corners) {
                     //Light up Corners of LED Matrix

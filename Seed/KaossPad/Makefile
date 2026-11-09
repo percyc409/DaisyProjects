@@ -1,6 +1,8 @@
 # Project Name
 TARGET = KaossPad
 
+USE_DAISYSP_LGPL=1
+
 # Sources
 CPP_SOURCES = KaossPad.cpp cts_encoder.cpp daisy_pad.cpp
 

@@ -26,6 +26,7 @@ class Dig_Delay
         FeedbackFilt.Init(SampleRate);
         FeedbackFilt.SetFilterMode(LadderFilter::FilterMode::LP12);
         FeedbackFilt.SetFreq(10000.0f); // 10KHz
+        FeedbackFilt.SetInputDrive(1.2f);
     };
 
     float Process(float in) {
